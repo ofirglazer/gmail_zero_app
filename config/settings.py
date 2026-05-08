@@ -18,14 +18,14 @@ Security note:
     exposed to a network interface.
 """
 
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Environment(str, Enum):
+class Environment(StrEnum):
     """
     Runtime environment modes.
 
@@ -91,7 +91,7 @@ class Settings(BaseSettings):
 
     # Never enable debug mode in production — it exposes an interactive
     # debugger that can execute arbitrary code.
-    debug: bool = False
+    debug: bool = True
 
     # ── Sync behaviour ────────────────────────────────────────────────────────
 

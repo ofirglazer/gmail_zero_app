@@ -1,9 +1,16 @@
 # TODO
 
-* .env.example is empty
-* add to_remove label to the workflow, marking a message eligible foe later deletion by the user. 
-* show UML diagrams of the app, including data flow, design patterns, architecture.
-* Finish implementation of Step 1 if not yet completed, and implement Step 2.
+## orders for Claude
+* Add ANN101 and ANN102 to the ignore rules.
+* I added trailing newline in every py file that missed it.
+* Update the files that I changed accordingly in your memory, do not resend them to me unless bug found or change needed.
+* Finish Step 2 implementation.
+* Show UML diagrams of the app, including data flow, design patterns, architecture.
+
+## for production 
+* GMAIL_ZERO_DEBUG=false
+* SECURITY: Generate a strong random key for production.
+* settings.py: debug: bool = False
 
 
 # gmail_zero_app
@@ -117,6 +124,7 @@ ruff check .
 
 # Formatting check
 ruff format --check .
+ruff format --diff .
 ```
 
 ---
