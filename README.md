@@ -1,9 +1,7 @@
 # TODO
 
 ## orders for Claude
-* Add ANN101 and ANN102 to the ignore rules.
-* I added trailing newline in every py file that missed it.
-* Update the files that I changed accordingly in your memory, do not resend them to me unless bug found or change needed.
+* what is the difference between message.py def is_large and GMAIL_ZERO_LARGE_MESSAGE_THRESHOLD_BYTES?
 * Finish Step 2 implementation.
 * Show UML diagrams of the app, including data flow, design patterns, architecture.
 
@@ -134,7 +132,7 @@ ruff format --diff .
 | Step | Description | Status |
 |---|---|---|
 | 1 | Project skeleton & configuration | ✅ Complete |
-| 2 | Domain models & safety guard | ⏳ Pending |
+| 2 | Domain models & safety guard | ✅ Complete |
 | 3 | Database layer (SQLAlchemy + repositories) | ⏳ Pending |
 | 4 | Mock Gmail client & OAuth stub | ⏳ Pending |
 | 5 | Sync engine & application services | ⏳ Pending |

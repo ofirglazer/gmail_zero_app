@@ -1,9 +1,31 @@
 """
 Domain model entities for gmail_zero_app.
 
-All models are plain Python dataclasses with no ORM or infrastructure
-dependencies.  They represent the core business concepts of the application.
+All models are frozen dataclasses with no ORM or infrastructure dependencies.
+Import from this package rather than from submodules to keep import paths stable.
 
-Models are implemented in Steps 2 and later.  This package marker exists
-from Step 1 to establish the correct package structure.
+    from domain.models import Message, Label, Thread, SyncState, DailySnapshot
+    from domain.models import LabelType, SyncType, make_message
 """
+
+from domain.models.daily_snapshot import DailySnapshot
+from domain.models.label import Label, LabelListVisibility, LabelType, MessageListVisibility
+from domain.models.message import Message, make_message
+from domain.models.sync_state import SyncState, SyncType
+from domain.models.thread import Thread
+
+__all__ = [
+    # Entities
+    "DailySnapshot",
+    "Label",
+    # Enums
+    "LabelListVisibility",
+    "LabelType",
+    "Message",
+    "MessageListVisibility",
+    "SyncState",
+    "SyncType",
+    "Thread",
+    # Factories
+    "make_message",
+]

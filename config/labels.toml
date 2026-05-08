@@ -38,6 +38,7 @@ awaiting_reply  = "ZeroApp/Awaiting-Reply"   # Waiting for someone else to respo
 complete        = "ZeroApp/Complete"         # Fully resolved, no further action
 review          = "ZeroApp/Review"           # Needs to be read or considered
 followup        = "ZeroApp/Follow-Up"        # Scheduled follow-up required
+to_remove       = "ZeroApp/To-Remove"        # Eligible for deletion -- user deletes manually in Gmail
 
 [classification]
 # Labels for categorising message types, used in the Archive Hygiene workflow.

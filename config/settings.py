@@ -91,7 +91,7 @@ class Settings(BaseSettings):
 
     # Never enable debug mode in production — it exposes an interactive
     # debugger that can execute arbitrary code.
-    debug: bool = True
+    debug: bool = False
 
     # ── Sync behaviour ────────────────────────────────────────────────────────
 
