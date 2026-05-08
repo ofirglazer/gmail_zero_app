@@ -1,0 +1,60 @@
+# gmail_zero_app — Label Configuration
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# All labels created and managed by gmail_zero_app are defined here.
+# This file is the single source of truth for label names.
+#
+# HOW TO CUSTOMISE:
+#   Change the values (right-hand side of =) to rename labels.
+#   Keys (left-hand side) are internal config identifiers — do not rename them.
+#
+# NAMESPACE:
+#   The label_namespace prefix (default "ZeroApp") groups all app-managed
+#   labels visually in Gmail's sidebar.  Labels will appear as
+#   ZeroApp/Needs-Action, ZeroApp/Newsletter, etc.
+#
+# IMPORTANT — before changing names after first sync:
+#   If you have already run a sync, renaming a label here does not rename
+#   the existing Gmail label.  Run the label migration command:
+#       python -m application.services.label_config_service migrate
+#   This will rename the Gmail label and update all local records.
+#
+# ADDING CUSTOM LABELS:
+#   Add entries under the [custom] section.  Keys must be valid Python
+#   identifiers (letters, digits, underscores).  The app will create these
+#   labels in Gmail on first run.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+[app]
+# Prefix applied to all app-managed labels.  Appears as a folder in Gmail.
+# Change this before first sync; changing it afterwards requires migration.
+label_namespace = "ZeroApp"
+
+[workflow]
+# Labels for tracking the processing state of individual messages.
+needs_action    = "ZeroApp/Needs-Action"     # Requires a response or decision
+awaiting_reply  = "ZeroApp/Awaiting-Reply"   # Waiting for someone else to respond
+complete        = "ZeroApp/Complete"         # Fully resolved, no further action
+review          = "ZeroApp/Review"           # Needs to be read or considered
+followup        = "ZeroApp/Follow-Up"        # Scheduled follow-up required
+
+[classification]
+# Labels for categorising message types, used in the Archive Hygiene workflow.
+newsletters     = "ZeroApp/Newsletter"       # Subscription newsletters and digests
+notifications   = "ZeroApp/Notification"     # Automated system notifications
+receipts        = "ZeroApp/Receipt"          # Purchase receipts and invoices
+bulk            = "ZeroApp/Bulk"             # Mass marketing / bulk sender
+
+[size]
+# Labels applied automatically during sync based on size thresholds.
+# Thresholds are configured in .env (GMAIL_ZERO_LARGE_MESSAGE_THRESHOLD_BYTES).
+large           = "ZeroApp/Large-Message"    # Above large_message_threshold_bytes
+very_large      = "ZeroApp/Very-Large"       # Above very_large_message_threshold_bytes
+
+[custom]
+# Add your own app-managed labels here.
+# Format: key = "ZeroApp/Label-Name"
+# Example:
+#   finance  = "ZeroApp/Finance"
+#   travel   = "ZeroApp/Travel"

@@ -1,0 +1,12 @@
+# gmail_zero_app — production dependencies
+# Install with: pip install -r requirements.txt
+
+flask>=3.0,<4.0
+flask-wtf>=1.2,<2.0
+sqlalchemy>=2.0,<3.0
+google-auth>=2.28,<3.0
+google-auth-oauthlib>=1.2,<2.0
+google-api-python-client>=2.120,<3.0
+pydantic>=2.6,<3.0
+pydantic-settings>=2.2,<3.0
+apscheduler>=3.10,<4.0
