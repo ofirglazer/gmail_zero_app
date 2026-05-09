@@ -1,12 +1,31 @@
 """
 Repository implementations for gmail_zero_app.
 
-Each repository provides typed CRUD and query operations for one aggregate.
-All repositories accept a SQLAlchemy ``Session`` via constructor injection.
+All repositories accept a SQLAlchemy Session via constructor injection
+and return domain entities (frozen dataclasses), never ORM objects.
 
-Implemented in Step 3:
-    MessageRepository      — messages table
-    LabelRepository        — labels + message_labels tables
-    SyncStateRepository    — sync_state table
-    SnapshotRepository     — daily_snapshots table (Step 8)
+    from infrastructure.persistence.repositories import (
+        MessageRepository,
+        LabelRepository,
+        SyncStateRepository,
+        SnapshotRepository,
+    )
 """
+
+from infrastructure.persistence.repositories.label_repository import LabelRepository
+from infrastructure.persistence.repositories.message_repository import (
+    MessageFilter,
+    MessageRepository,
+    SenderStats,
+)
+from infrastructure.persistence.repositories.snapshot_repository import SnapshotRepository
+from infrastructure.persistence.repositories.sync_state_repository import SyncStateRepository
+
+__all__ = [
+    "LabelRepository",
+    "MessageFilter",
+    "MessageRepository",
+    "SenderStats",
+    "SnapshotRepository",
+    "SyncStateRepository",
+]

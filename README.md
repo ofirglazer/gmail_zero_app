@@ -1,9 +1,11 @@
 # TODO
 
 ## orders for Claude
+* explain or fix each error in mypy check.
+* Show class, data flow, sequence and ladder UML diagrams.
 * what is the difference between message.py def is_large and GMAIL_ZERO_LARGE_MESSAGE_THRESHOLD_BYTES?
-* Finish Step 2 implementation.
-* Show UML diagrams of the app, including data flow, design patterns, architecture.
+* Finish Step 4 implementation.
+
 
 ## for production 
 * GMAIL_ZERO_DEBUG=false
@@ -16,12 +18,12 @@
 A production-grade local web application for Gmail mailbox metadata analysis
 and safe label management, built around four operational zero-goals:
 
-| Goal | Target |
-|---|---|
-| **Inbox Zero** | Process inbox to zero messages |
+| Goal             | Target                                        |
+|------------------|-----------------------------------------------|
+| **Inbox Zero**   | Process inbox to zero messages                |
 | **Archive Zero** | Zero archived messages without a custom label |
-| **Sent Zero** | Zero sent items requiring follow-up action |
-| **Size Zero** | Reduce total mailbox storage footprint |
+| **Sent Zero**    | Zero sent items requiring follow-up action    |
+| **Size Zero**    | Reduce total mailbox storage footprint        |
 
 > **Safety by design**: this application can only read metadata and
 > manage labels. It cannot send, delete, archive, draft, or modify
@@ -129,13 +131,13 @@ ruff format --diff .
 
 ## Implementation Progress
 
-| Step | Description | Status |
-|---|---|---|
-| 1 | Project skeleton & configuration | ✅ Complete |
-| 2 | Domain models & safety guard | ✅ Complete |
-| 3 | Database layer (SQLAlchemy + repositories) | ⏳ Pending |
-| 4 | Mock Gmail client & OAuth stub | ⏳ Pending |
-| 5 | Sync engine & application services | ⏳ Pending |
-| 6 | Flask app & core routes (read-only) | ⏳ Pending |
-| 7 | Labelling UI & bulk operations | ⏳ Pending |
-| 8 | Progress graphs, snapshots & hardening | ⏳ Pending |
+| Step | Description                                | Status     |
+|------|--------------------------------------------|------------|
+| 1    | Project skeleton & configuration           | ✅ Complete |
+| 2    | Domain models & safety guard               | ✅ Complete |
+| 3    | Database layer (SQLAlchemy + repositories) | ✅ Complete |
+| 4    | Mock Gmail client & OAuth stub             | ⏳ Pending  |
+| 5    | Sync engine & application services         | ⏳ Pending  |
+| 6    | Flask app & core routes (read-only)        | ⏳ Pending  |
+| 7    | Labelling UI & bulk operations             | ⏳ Pending  |
+| 8    | Progress graphs, snapshots & hardening     | ⏳ Pending  |

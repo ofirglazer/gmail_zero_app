@@ -29,7 +29,7 @@ def demo_settings() -> Settings:
         db_path=":memory:",  # type: ignore[arg-type]
         host="127.0.0.1",
         port=5000,
-        debug=False,
+        debug=True,
         sync_batch_size=10,
         sync_rate_limit_delay_ms=0,  # No delay in tests
     )

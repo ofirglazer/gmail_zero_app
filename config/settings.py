@@ -108,8 +108,8 @@ class Settings(BaseSettings):
     # Messages above these sizes are flagged in the Size Reduction workflow.
 
     large_message_threshold_bytes: int = Field(
-        default=5 * 1024 * 1024,   # 5 MB
-        ge=1024 * 1024,            # minimum 1 MB
+        default=5 * 1024 * 1024,  # 5 MB
+        ge=1024 * 1024,  # minimum 1 MB
         description="Byte size above which a message is flagged as 'Large'.",
     )
     very_large_message_threshold_bytes: int = Field(
@@ -141,8 +141,7 @@ class Settings(BaseSettings):
         allowed = {"127.0.0.1", "localhost"}
         if value not in allowed:
             raise ValueError(
-                f"GMAIL_ZERO_HOST must be one of {allowed} (local-only application). "
-                f"Got: {value!r}"
+                f"GMAIL_ZERO_HOST must be one of {allowed} (local-only application). Got: {value!r}"
             )
         return value
 

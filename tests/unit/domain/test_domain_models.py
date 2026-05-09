@@ -27,7 +27,7 @@ from domain.models import (
     make_message,
 )
 
-# ── Shared fixtures ───────────────────────────────────────────────────────────
+# ## Shared fixtures ##
 
 
 @pytest.fixture
@@ -95,7 +95,7 @@ def sent_message(now: datetime) -> Message:
 class TestMessage:
     """Tests for the Message domain entity and make_message factory."""
 
-    # ── Construction and field mapping ────────────────────────────────────────
+    # ## Construction and field mapping ##
 
     def test_inbox_message_flags(self, inbox_message: Message) -> None:
         assert inbox_message.is_inbox is True
@@ -162,7 +162,7 @@ class TestMessage:
         assert msg.first_seen_at == first
         assert msg.last_synced_at == last
 
-    # ── has_custom_label derivation ───────────────────────────────────────────
+    # ## has_custom_label derivation ##
 
     def test_has_custom_label_with_user_label(self, now: datetime) -> None:
         msg = make_message(
@@ -188,7 +188,7 @@ class TestMessage:
         )
         assert msg.has_custom_label is False
 
-    # ── is_archived derivation ────────────────────────────────────────────────
+    # ## is_archived derivation ##
 
     def test_not_archived_when_in_inbox(self, now: datetime) -> None:
         msg = make_message(
@@ -217,7 +217,7 @@ class TestMessage:
     def test_archived_when_not_in_inbox_trash_spam(self, archived_message: Message) -> None:
         assert archived_message.is_archived is True
 
-    # ── Derived properties ────────────────────────────────────────────────────
+    # ## Derived properties ##
 
     def test_size_in_mb(self, now: datetime) -> None:
         msg = make_message(
@@ -274,7 +274,7 @@ class TestMessage:
         # archived_message has Label_userNewsletter
         assert archived_message.needs_label is False
 
-    # ── with_labels mutation ──────────────────────────────────────────────────
+    # ## with_labels mutation ##
 
     def test_with_labels_produces_new_instance(self, inbox_message: Message) -> None:
         updated = inbox_message.with_labels(frozenset({"INBOX", "Label_complete"}))
@@ -315,7 +315,7 @@ class TestMessage:
         assert updated.has_custom_label is False
         assert updated.is_archived is True
 
-    # ── __str__ ───────────────────────────────────────────────────────────────
+    # ## __str__ ##
 
     def test_str_inbox_message(self, inbox_message: Message) -> None:
         s = str(inbox_message)
@@ -502,7 +502,7 @@ class TestThread:
         assert future_thread.age_days == 0
 
 
-# ── SyncState tests ───────────────────────────────────────────────────────────
+# ## SyncState tests ##
 
 
 @pytest.mark.unit
@@ -573,7 +573,7 @@ class TestSyncState:
         assert "12289" in s
 
 
-# ── DailySnapshot tests ───────────────────────────────────────────────────────
+# ## DailySnapshot tests ##
 
 
 @pytest.mark.unit

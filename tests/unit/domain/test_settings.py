@@ -133,7 +133,7 @@ class TestSettingsSizeThresholds:
         s = Settings(
             env=Environment.DEMO,
             secret_key="a" * 32,
-            large_message_threshold_bytes=5 * 1024 * 1024,
+            large_message_threshold_bytes=3 * 1024 * 1024,
             very_large_message_threshold_bytes=20 * 1024 * 1024,
         )
         assert s.very_large_message_threshold_bytes > s.large_message_threshold_bytes
@@ -157,7 +157,7 @@ class TestSettingsSizeThresholds:
             )
 
 
-# ── OAuth scope constants ─────────────────────────────────────────────────────
+# ## OAuth scope constants ##
 
 
 @pytest.mark.unit

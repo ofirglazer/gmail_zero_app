@@ -113,9 +113,7 @@ class BulkLabelOperationRequest:
 
         overlap = self.add_label_ids & self.remove_label_ids
         if overlap:
-            raise ValueError(
-                f"The same label IDs appear in both add and remove sets: {overlap}."
-            )
+            raise ValueError(f"The same label IDs appear in both add and remove sets: {overlap}.")
 
     @property
     def message_count(self) -> int:
@@ -148,7 +146,4 @@ class BulkLabelOperationRequest:
             parts.append(f"add={set(self.add_label_ids)}")
         if self.remove_label_ids:
             parts.append(f"remove={set(self.remove_label_ids)}")
-        return (
-            f"BulkLabelOperationRequest("
-            f"messages={self.message_count}, {', '.join(parts)})"
-        )
+        return f"BulkLabelOperationRequest(messages={self.message_count}, {', '.join(parts)})"
