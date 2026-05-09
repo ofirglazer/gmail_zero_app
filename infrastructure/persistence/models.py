@@ -103,12 +103,8 @@ class MessageORM(Base):
     # Canonical source is the message_labels junction table.
     raw_label_ids: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
 
-    first_seen_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
-    last_synced_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # Relationships
     thread: Mapped[ThreadORM] = relationship("ThreadORM", back_populates="messages")
@@ -183,7 +179,7 @@ class MessageORM(Base):
         return f"<MessageORM id={self.id!r} inbox={self.is_inbox}>"
 
 
-# ── Threads ───────────────────────────────────────────────────────────────────
+# ## Threads ##
 
 
 class ThreadORM(Base):
@@ -195,19 +191,13 @@ class ThreadORM(Base):
     subject: Mapped[str | None] = mapped_column(Text, nullable=True)
     message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_message_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_inbox: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     has_custom_label: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    last_synced_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    last_synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # Relationships
-    messages: Mapped[list[MessageORM]] = relationship(
-        "MessageORM", back_populates="thread"
-    )
+    messages: Mapped[list[MessageORM]] = relationship("MessageORM", back_populates="thread")
 
     __table_args__ = (
         Index("idx_threads_is_inbox", "is_inbox"),
@@ -220,9 +210,7 @@ class ThreadORM(Base):
             subject=self.subject,
             message_count=self.message_count,
             snippet=self.snippet,
-            last_message_at=(
-                _ensure_utc(self.last_message_at) if self.last_message_at else None
-            ),
+            last_message_at=(_ensure_utc(self.last_message_at) if self.last_message_at else None),
             is_inbox=self.is_inbox,
             has_custom_label=self.has_custom_label,
             last_synced_at=_ensure_utc(self.last_synced_at),
@@ -245,7 +233,7 @@ class ThreadORM(Base):
         return f"<ThreadORM id={self.id!r} messages={self.message_count}>"
 
 
-# ── Labels ────────────────────────────────────────────────────────────────────
+# ## Labels ##
 
 
 class LabelORM(Base):
@@ -257,12 +245,8 @@ class LabelORM(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     # 'system' or 'user'
     type: Mapped[str] = mapped_column(String(32), nullable=False)
-    message_list_visibility: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
-    label_list_visibility: Mapped[str | None] = mapped_column(
-        String(64), nullable=True
-    )
+    message_list_visibility: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    label_list_visibility: Mapped[str | None] = mapped_column(String(64), nullable=True)
     synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # Relationships
@@ -332,20 +316,12 @@ class MessageLabelORM(Base):
     message_id: Mapped[str] = mapped_column(
         String(255), ForeignKey("messages.id"), primary_key=True
     )
-    label_id: Mapped[str] = mapped_column(
-        String(255), ForeignKey("labels.id"), primary_key=True
-    )
-    applied_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    label_id: Mapped[str] = mapped_column(String(255), ForeignKey("labels.id"), primary_key=True)
+    applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # Relationships
-    message: Mapped[MessageORM] = relationship(
-        "MessageORM", back_populates="label_associations"
-    )
-    label: Mapped[LabelORM] = relationship(
-        "LabelORM", back_populates="message_associations"
-    )
+    message: Mapped[MessageORM] = relationship("MessageORM", back_populates="label_associations")
+    label: Mapped[LabelORM] = relationship("LabelORM", back_populates="message_associations")
 
     __table_args__ = (Index("idx_message_labels_label_id", "label_id"),)
 
@@ -368,15 +344,11 @@ class SyncStateORM(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     history_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    last_synced_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    last_synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     # 'full' or 'incremental'
     sync_type: Mapped[str] = mapped_column(String(32), nullable=False)
     messages_synced: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     def to_domain(self) -> SyncState:
         return SyncState(
@@ -399,10 +371,7 @@ class SyncStateORM(Base):
         )
 
     def __repr__(self) -> str:
-        return (
-            f"<SyncStateORM id={self.id} history_id={self.history_id!r} "
-            f"type={self.sync_type}>"
-        )
+        return f"<SyncStateORM id={self.id} history_id={self.history_id!r} type={self.sync_type}>"
 
 
 # ── Daily snapshots ───────────────────────────────────────────────────────────
@@ -452,10 +421,7 @@ class DailySnapshotORM(Base):
         )
 
     def __repr__(self) -> str:
-        return (
-            f"<DailySnapshotORM date={self.snapshot_date} "
-            f"inbox={self.inbox_count}>"
-        )
+        return f"<DailySnapshotORM date={self.snapshot_date} inbox={self.inbox_count}>"
 
 
 # ── Label operations audit log ────────────────────────────────────────────────
@@ -504,7 +470,7 @@ class LabelOperationLogORM(Base):
         )
 
 
-# ── Utility ───────────────────────────────────────────────────────────────────
+# ## Utility ##
 
 
 def _ensure_utc(dt: datetime) -> datetime:
@@ -540,6 +506,6 @@ def get_all_orm_models() -> list[type[Base]]:
         DailySnapshotORM,  # No FK deps
         SyncStateORM,    # No FK deps
         MessageORM,      # FK → threads
-        MessageLabelORM, # FK → messages, labels
+        MessageLabelORM,  # FK → messages, labels
         LabelOperationLogORM,  # FK → messages
     ]

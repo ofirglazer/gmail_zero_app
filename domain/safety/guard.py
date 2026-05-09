@@ -59,7 +59,7 @@ class SafetyGuard:
     (all rules passed) or raise ``SafetyViolationError`` at the first violation.
     """
 
-    # ── Public validation entry points ────────────────────────────────────────
+    # ## Public validation entry points ##
 
     def validate_label_operation(self, request: LabelOperationRequest) -> None:
         """
@@ -96,11 +96,9 @@ class SafetyGuard:
         self._check_no_protected_label_addition(request.add_label_ids)
         self._check_labels_per_operation_limit(request.total_label_count)
 
-    # ── Individual safety checks (Guard pattern) ──────────────────────────────
+    # ## Individual safety checks (Guard pattern) ##
 
-    def _check_no_archive_via_inbox_removal(
-        self, remove_label_ids: frozenset[str]
-    ) -> None:
+    def _check_no_archive_via_inbox_removal(self, remove_label_ids: frozenset[str]) -> None:
         """
         Block any attempt to archive a message by removing the INBOX label.
 
@@ -124,9 +122,7 @@ class SafetyGuard:
                 label_id=ARCHIVE_TRIGGER_LABEL_ID,
             )
 
-    def _check_no_protected_label_removal(
-        self, remove_label_ids: frozenset[str]
-    ) -> None:
+    def _check_no_protected_label_removal(self, remove_label_ids: frozenset[str]) -> None:
         """
         Block removal of any Gmail system label.
 
@@ -150,9 +146,7 @@ class SafetyGuard:
                 label_id=sorted_violations[0],
             )
 
-    def _check_no_protected_label_addition(
-        self, add_label_ids: frozenset[str]
-    ) -> None:
+    def _check_no_protected_label_addition(self, add_label_ids: frozenset[str]) -> None:
         """
         Block addition of system labels that must not be user-assigned.
 

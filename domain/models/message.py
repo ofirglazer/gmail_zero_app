@@ -149,8 +149,7 @@ class Message:
             A new frozen Message instance with updated label-derived fields.
         """
         has_custom = any(
-            lid not in _SYSTEM_LABEL_IDS and not lid.startswith("CATEGORY_")
-            for lid in label_ids
+            lid not in _SYSTEM_LABEL_IDS and not lid.startswith("CATEGORY_") for lid in label_ids
         )
         return Message(
             id=self.id,
@@ -167,9 +166,7 @@ class Message:
             is_inbox="INBOX" in label_ids,
             is_sent="SENT" in label_ids,
             is_archived=(
-                "INBOX" not in label_ids
-                and "TRASH" not in label_ids
-                and "SPAM" not in label_ids
+                "INBOX" not in label_ids and "TRASH" not in label_ids and "SPAM" not in label_ids
             ),
             is_starred="STARRED" in label_ids,
             is_important="IMPORTANT" in label_ids,
@@ -180,11 +177,7 @@ class Message:
         )
 
     def __str__(self) -> str:
-        location = (
-            "inbox" if self.is_inbox
-            else "sent" if self.is_sent
-            else "archived"
-        )
+        location = "inbox" if self.is_inbox else "sent" if self.is_sent else "archived"
         return (
             f"Message(id={self.id!r}, from={self.sender!r}, "
             f"subject={self.subject!r}, location={location}, "
@@ -253,8 +246,7 @@ def make_message(
     ids: frozenset[str] = label_ids if label_ids is not None else frozenset()
 
     has_custom = any(
-        lid not in _SYSTEM_LABEL_IDS and not lid.startswith("CATEGORY_")
-        for lid in ids
+        lid not in _SYSTEM_LABEL_IDS and not lid.startswith("CATEGORY_") for lid in ids
     )
 
     return Message(
@@ -271,11 +263,7 @@ def make_message(
         is_unread="UNREAD" in ids,
         is_inbox="INBOX" in ids,
         is_sent="SENT" in ids,
-        is_archived=(
-            "INBOX" not in ids
-            and "TRASH" not in ids
-            and "SPAM" not in ids
-        ),
+        is_archived=("INBOX" not in ids and "TRASH" not in ids and "SPAM" not in ids),
         is_starred="STARRED" in ids,
         is_important="IMPORTANT" in ids,
         has_custom_label=has_custom,
