@@ -189,12 +189,14 @@ class Message:
 
 # System label IDs used in with_labels() to determine has_custom_label.
 # Kept module-private — external code should use domain.safety.constants.
-_SYSTEM_LABEL_IDS: frozenset[str] = frozenset({
-    "INBOX", "SENT", "DRAFT", "TRASH", "SPAM",
-    "STARRED", "IMPORTANT", "UNREAD",
-    "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
-    "CATEGORY_UPDATES", "CATEGORY_FORUMS",
-})
+_SYSTEM_LABEL_IDS: frozenset[str] = frozenset(
+    {
+        "INBOX", "SENT", "DRAFT", "TRASH", "SPAM",
+        "STARRED", "IMPORTANT", "UNREAD",
+        "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
+        "CATEGORY_UPDATES", "CATEGORY_FORUMS",
+    }
+)
 
 
 # ── Factory helpers ───────────────────────────────────────────────────────────

@@ -41,13 +41,15 @@ REQUIRED_SCOPES: list[str] = [
 
 # Any token carrying these scopes grants powers beyond this app's mandate.
 # The OAuth module checks stored tokens against this set at startup.
-FORBIDDEN_SCOPES: frozenset[str] = frozenset({
-    # Full modify access — allows archiving, moving, marking read, etc.
-    "https://www.googleapis.com/auth/gmail.modify",
-    # Compose/draft access — allows creating and editing drafts.
-    "https://www.googleapis.com/auth/gmail.compose",
-    # Send access — allows sending emails.
-    "https://www.googleapis.com/auth/gmail.send",
-    # Full mailbox access — supersedes all other scopes.
-    "https://mail.google.com/",
-})
+FORBIDDEN_SCOPES: frozenset[str] = frozenset(
+    {
+        # Full modify access — allows archiving, moving, marking read, etc.
+        "https://www.googleapis.com/auth/gmail.modify",
+        # Compose/draft access — allows creating and editing drafts.
+        "https://www.googleapis.com/auth/gmail.compose",
+        # Send access — allows sending emails.
+        "https://www.googleapis.com/auth/gmail.send",
+        # Full mailbox access — supersedes all other scopes.
+        "https://mail.google.com/",
+    }
+)
