@@ -21,7 +21,7 @@ PLACEMENT IN DOMAIN LAYER:
     be accompanied by updated tests in tests/safety/.
 """
 
-# ── Gmail system label IDs ────────────────────────────────────────────────────
+# ## Gmail system label IDs ##
 #
 # These are Gmail's internal label identifiers.  They are constant across
 # all personal Gmail accounts (they are not user-generated IDs).
@@ -30,34 +30,38 @@ PLACEMENT IN DOMAIN LAYER:
 # this application.  Removing INBOX archives the message (forbidden).
 # Removing SENT, DRAFT, etc. would corrupt Gmail's internal categorisation.
 #
-PROTECTED_LABEL_IDS: frozenset[str] = frozenset({
-    "INBOX",
-    "SENT",
-    "DRAFT",
-    "TRASH",
-    "SPAM",
-    "STARRED",
-    "IMPORTANT",
-    "UNREAD",
-    "CATEGORY_PERSONAL",
-    "CATEGORY_SOCIAL",
-    "CATEGORY_PROMOTIONS",
-    "CATEGORY_UPDATES",
-    "CATEGORY_FORUMS",
-})
+PROTECTED_LABEL_IDS: frozenset[str] = frozenset(
+    {
+        "INBOX",
+        "SENT",
+        "DRAFT",
+        "TRASH",
+        "SPAM",
+        "STARRED",
+        "IMPORTANT",
+        "UNREAD",
+        "CATEGORY_PERSONAL",
+        "CATEGORY_SOCIAL",
+        "CATEGORY_PROMOTIONS",
+        "CATEGORY_UPDATES",
+        "CATEGORY_FORUMS",
+    }
+)
 
 # Labels that may not be ADDED to a message by this application.
 # TRASH and SPAM assignment should only be done by Gmail itself.
 # DRAFT and SENT are internal state markers not meant for user assignment.
 #
-PROTECTED_ADD_LABEL_IDS: frozenset[str] = frozenset({
-    "TRASH",
-    "SPAM",
-    "DRAFT",
-    "SENT",
-})
+PROTECTED_ADD_LABEL_IDS: frozenset[str] = frozenset(
+    {
+        "TRASH",
+        "SPAM",
+        "DRAFT",
+        "SENT",
+    }
+)
 
-# ── Archive trigger ───────────────────────────────────────────────────────────
+# ## Archive trigger ##
 #
 # Removing the INBOX label from a message is equivalent to archiving it.
 # This is an archive operation and is explicitly forbidden.
@@ -65,7 +69,7 @@ PROTECTED_ADD_LABEL_IDS: frozenset[str] = frozenset({
 #
 ARCHIVE_TRIGGER_LABEL_ID: str = "INBOX"
 
-# ── Forbidden Gmail API operation names ───────────────────────────────────────
+# ## Forbidden Gmail API operation names ##
 #
 # These are the exact resource.method names from the Gmail API discovery
 # document.  The GmailClient checks every intended API call against this set
@@ -74,35 +78,37 @@ ARCHIVE_TRIGGER_LABEL_ID: str = "INBOX"
 #
 # No exceptions.  No bypass mechanism.
 #
-FORBIDDEN_API_OPERATIONS: frozenset[str] = frozenset({
-    # ── Sending ───────────────────────────────────────────────────────────────
-    "users.messages.send",
+FORBIDDEN_API_OPERATIONS: frozenset[str] = frozenset(
+    {
+        # ── Sending ───────────────────────────────────────────────────────────────
+        "users.messages.send",
 
-    # ── Draft management ──────────────────────────────────────────────────────
-    "users.drafts.create",
-    "users.drafts.update",
-    "users.drafts.delete",
-    "users.drafts.send",
-    "users.drafts.list",    # not needed; included to minimise attack surface
+        # ── Draft management ──────────────────────────────────────────────────────
+        "users.drafts.create",
+        "users.drafts.update",
+        "users.drafts.delete",
+        "users.drafts.send",
+        "users.drafts.list",    # not needed; included to minimise attack surface
 
-    # ── Destructive message operations ────────────────────────────────────────
-    "users.messages.delete",
-    "users.messages.trash",
-    "users.messages.untrash",
+        # ── Destructive message operations ────────────────────────────────────────
+        "users.messages.delete",
+        "users.messages.trash",
+        "users.messages.untrash",
 
-    # ── Batch operations (too broad; cannot pre-validate safety) ──────────────
-    "users.messages.batchDelete",
-    "users.messages.batchModify",
+        # ── Batch operations (too broad; cannot pre-validate safety) ──────────────
+        "users.messages.batchDelete",
+        "users.messages.batchModify",
 
-    # ── Message creation (import/insert creates new messages) ─────────────────
-    "users.messages.import",
-    "users.messages.insert",
+        # ── Message creation (import/insert creates new messages) ─────────────────
+        "users.messages.import",
+        "users.messages.insert",
 
-    # ── Attachment access (not needed; metadata-only operation) ───────────────
-    "users.messages.attachments.get",
-})
+        # ── Attachment access (not needed; metadata-only operation) ───────────────
+        "users.messages.attachments.get",
+    }
+)
 
-# ── Bulk operation limits ─────────────────────────────────────────────────────
+# ## Bulk operation limits ##
 #
 # Conservative limits on the blast radius of bulk label operations.
 # These are safety limits, not Gmail API limits.

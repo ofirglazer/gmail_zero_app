@@ -38,6 +38,11 @@ Demo mode details:
       subsequent list_messages / get_message calls
     - History simulation: each ``simulate_sync_advance()`` call adds a
       small batch of new messages and advances the historyId
+
+Step 5 addition:
+    ``create_label()`` added.  Creates a new label entry in the in-memory
+    label registry and assigns a deterministic mock label ID.  The created
+    label is immediately visible in subsequent ``list_labels()`` calls.
 """
 
 from __future__ import annotations
@@ -199,7 +204,7 @@ def _build_initial_dataset() -> dict[str, dict[str, Any]]:
     """
     Build the full synthetic dataset as a message_id → API dict mapping.
 
-    Returns a new dict each time so mutations don't affect the template.
+    Returns a new dict each time so mutations don't affect the class-level template.
     """
     msgs: list[dict[str, Any]] = [
 
@@ -431,8 +436,8 @@ def _build_initial_dataset() -> dict[str, dict[str, Any]]:
                 sender="newsletter@acme.com",
                 subject=(
                     "Monthly digest — "
-                    + ["Jan","Feb","Mar","Apr","May","Jun",
-                       "Jul","Aug","Sep","Oct","Nov","Dec"][i % 12]
+                    + ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][i % 12]
                     + " 2023"
                 ),
                 label_ids=[],
@@ -558,6 +563,10 @@ class MockGmailClient:
     are immediately reflected in subsequent ``get_message`` / ``list_messages``
     calls — simulating a real Gmail account.
 
+    ``create_label`` adds a new label to the in-memory registry with a
+    deterministic mock ID.  The created label is immediately visible in
+    ``list_labels()`` results.
+
     A mock history ID is maintained and advances with each simulated sync
     cycle via ``advance_history()``.
 
@@ -574,6 +583,12 @@ class MockGmailClient:
         # Deep-copy the dataset so mutations don't affect the class-level template
         self._messages: dict[str, dict[str, Any]] = _build_initial_dataset()
         self._history_events: list[dict[str, Any]] = []
+        # Mutable user-label registry: allows create_label to add entries
+        self._user_labels: list[dict[str, Any]] = list(
+            copy.deepcopy(lbl) for lbl in _USER_LABELS
+        )
+        # Counter for generating deterministic mock label IDs
+        self._next_label_seq: int = 900
 
     # ── AbstractGmailClient interface ─────────────────────────────────────────
 
@@ -621,15 +636,53 @@ class MockGmailClient:
         return [self.get_message(mid, format=format) for mid in message_ids]
 
     def list_labels(self) -> dict[str, Any]:
-        """Return all labels (system + user-defined)."""
-        return {"labels": _SYSTEM_LABELS + _USER_LABELS}
+        """Return all labels (system + user-defined, including any created this session)."""
+        return {"labels": _SYSTEM_LABELS + self._user_labels}
 
     def get_label(self, label_id: str) -> dict[str, Any]:
         """Return a single label by ID."""
-        all_labels = {lbl["id"]: lbl for lbl in _SYSTEM_LABELS + _USER_LABELS}
+        all_labels = {
+            lbl["id"]: lbl
+            for lbl in _SYSTEM_LABELS + self._user_labels
+        }
         if label_id not in all_labels:
             raise KeyError(f"Label not found: {label_id!r}")
         return copy.deepcopy(all_labels[label_id])
+
+    def create_label(self, name: str) -> dict[str, Any]:
+        """
+        Create a new user label in the in-memory label registry.
+
+        Assigns a deterministic mock label ID (``Label_Mock{seq:04d}``) so
+        test assertions can refer to created labels by a predictable ID pattern.
+
+        If a label with the same name already exists, returns the existing
+        label resource (idempotent, matching Gmail API behaviour).
+
+        Args:
+            name: Display name for the new label, e.g. ``"ZeroApp/Custom"``.
+
+        Returns:
+            Gmail API label resource dict with the newly assigned ``id``.
+        """
+        # Check for existing label with the same name (idempotent)
+        existing = next(
+            (lbl for lbl in self._user_labels if lbl["name"] == name),
+            None,
+        )
+        if existing is not None:
+            return copy.deepcopy(existing)
+
+        self._next_label_seq += 1
+        new_label: dict[str, Any] = {
+            "id": f"Label_Mock{self._next_label_seq:04d}",
+            "name": name,
+            "type": "user",
+            "messageListVisibility": "show",
+            "labelListVisibility": "labelShow",
+        }
+        self._user_labels.append(new_label)
+        return copy.deepcopy(new_label)
 
     def modify_message_labels(
         self,

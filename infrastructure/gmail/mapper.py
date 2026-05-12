@@ -26,7 +26,7 @@ from typing import Any
 from domain.models.label import Label, LabelListVisibility, LabelType, MessageListVisibility
 from domain.models.message import Message, make_message
 
-# ── Constants ─────────────────────────────────────────────────────────────────
+# ## Constants ##
 
 # Metadata headers fetched during sync.  Requesting only what we need keeps
 # API response sizes small.
@@ -67,7 +67,7 @@ class GmailMapper:
         """
         self._user_email = user_email.lower().strip()
 
-    # ── Message mapping ───────────────────────────────────────────────────────
+    # ## Message mapping ##
 
     def api_dict_to_message(
         self,
@@ -97,9 +97,7 @@ class GmailMapper:
         history_id: str = api_dict.get("historyId", "0")
 
         # Gmail provides internalDate as milliseconds since Unix epoch (string)
-        internal_date = self._parse_internal_date(
-            api_dict.get("internalDate", "0")
-        )
+        internal_date = self._parse_internal_date(api_dict.get("internalDate", "0"))
 
         # Label IDs are already a list of strings
         label_ids: frozenset[str] = frozenset(api_dict.get("labelIds", []))
@@ -223,7 +221,7 @@ class GmailMapper:
 
         return added_ids, label_changed_ids
 
-    # ── Private helpers ───────────────────────────────────────────────────────
+    # ## Private helpers ##
 
     @staticmethod
     def _parse_internal_date(raw: str) -> datetime:

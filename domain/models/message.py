@@ -74,7 +74,7 @@ class Message:
     first_seen_at: datetime
     last_synced_at: datetime
 
-    # ── Derived properties ────────────────────────────────────────────────────
+    # ## Derived properties ##
 
     @property
     def size_in_mb(self) -> float:
@@ -185,21 +185,30 @@ class Message:
         )
 
 
-# ── Module-level constants ────────────────────────────────────────────────────
+# ## Module-level constants ##
 
 # System label IDs used in with_labels() to determine has_custom_label.
 # Kept module-private — external code should use domain.safety.constants.
 _SYSTEM_LABEL_IDS: frozenset[str] = frozenset(
     {
-        "INBOX", "SENT", "DRAFT", "TRASH", "SPAM",
-        "STARRED", "IMPORTANT", "UNREAD",
-        "CATEGORY_PERSONAL", "CATEGORY_SOCIAL", "CATEGORY_PROMOTIONS",
-        "CATEGORY_UPDATES", "CATEGORY_FORUMS",
+        "INBOX",
+        "SENT",
+        "DRAFT",
+        "TRASH",
+        "SPAM",
+        "STARRED",
+        "IMPORTANT",
+        "UNREAD",
+        "CATEGORY_PERSONAL",
+        "CATEGORY_SOCIAL",
+        "CATEGORY_PROMOTIONS",
+        "CATEGORY_UPDATES",
+        "CATEGORY_FORUMS",
     }
 )
 
 
-# ── Factory helpers ───────────────────────────────────────────────────────────
+# ## Factory helpers ##
 
 def make_message(
     *,

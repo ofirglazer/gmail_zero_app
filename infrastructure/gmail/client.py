@@ -18,6 +18,11 @@ Safety architecture — Layer 3:
     All three layers must be defeated independently for a forbidden operation
     to reach the Gmail API. In practice this is impossible — the layers are
     orthogonal and each catches a different class of violation.
+
+Step 5 additions:
+    ``create_label`` added to AbstractGmailClient Protocol and GmailClient.
+    ``"users.labels.create"`` added to _PERMITTED_OPERATIONS.
+    Required by LabelConfigService.ensure_labels_exist().
 """
 
 from __future__ import annotations
@@ -142,6 +147,25 @@ class AbstractGmailClient(Protocol):
         """
         ...
 
+    def create_label(self, name: str) -> dict[str, Any]:
+        """
+        Create a new user label in the authenticated user's mailbox.
+
+        Mirrors: users.labels.create
+
+        Used by ``LabelConfigService.ensure_labels_exist()`` to bootstrap
+        the ZeroApp/* label hierarchy on first run.
+
+        Args:
+            name: The label display name, e.g. ``"ZeroApp/Needs-Action"``.
+                  Gmail uses ``/`` as a nesting separator — the UI shows
+                  nested labels as sub-labels under their parent.
+
+        Returns:
+            Gmail API label resource dict with the newly assigned ``id``.
+        """
+        ...
+
     def modify_message_labels(
         self,
         message_id: str,
@@ -225,9 +249,10 @@ class GmailClient:
     _PERMITTED_OPERATIONS: frozenset[str] = frozenset({
         "users.messages.list",
         "users.messages.get",
-        "users.messages.modify",   # The only write — add/remove labels only
+        "users.messages.modify",    # The only message write — add/remove labels only
         "users.labels.list",
         "users.labels.get",
+        "users.labels.create",      # Added in Step 5 for LabelConfigService
         "users.history.list",
         "users.getProfile",
     })
@@ -315,10 +340,12 @@ class GmailClient:
 
         Sends a single HTTP request containing multiple sub-requests.
         Falls back to sequential calls if the batch library is unavailable.
+
+        NOTE (technical debt): This implementation makes sequential calls,
+        not a true HTTP batch request.  Optimise to the Gmail batch API in
+        a future step to reduce quota consumption on large syncs.
         """
         self._check_not_forbidden("users.messages.get")
-        # Gmail batch: up to 100 requests per batch HTTP call.
-        # For simplicity in Step 4, sequential calls; batch optimisation in Step 5.
         return [
             self.get_message(mid, format=format, metadata_headers=metadata_headers)
             for mid in message_ids
@@ -334,6 +361,25 @@ class GmailClient:
         self._check_not_forbidden("users.labels.get")
         return self._service.users().labels().get(userId="me", id=label_id).execute()  # type: ignore[no-any-return]
 
+    def create_label(self, name: str) -> dict[str, Any]:
+        """
+        Create a new user label.
+
+        See AbstractGmailClient for full docstring.
+        """
+        self._check_not_forbidden("users.labels.create")
+        body: dict[str, Any] = {
+            "name": name,
+            "messageListVisibility": "show",
+            "labelListVisibility": "labelShow",
+        }
+        return (  # type: ignore[no-any-return]
+            self._service.users()
+            .labels()
+            .create(userId="me", body=body)
+            .execute()
+        )
+
     def modify_message_labels(
         self,
         message_id: str,
@@ -344,7 +390,7 @@ class GmailClient:
         """
         Add or remove labels on a message.
 
-        This is the ONLY write operation this client ever performs.
+        This is the ONLY message write operation this client ever performs.
         The SafetyGuard (Layer 2) must have validated the operation before
         this method is called.
 
