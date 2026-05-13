@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Inbox Zero — Gmail Zero{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Inbox Zero
+        <span class="count-badge">{{ total_count }}</span>
+    </h1>
+    <p class="page-desc">
+        Messages in your inbox, oldest first. Label each one to reach Inbox Zero.
+    </p>
+</div>
+
+{% if messages %}
+
+{# ── Message table ─────────────────────────────────────────────────────────── #}
+<div class="table-wrapper">
+    <table class="msg-table" aria-label="Inbox messages">
+        <thead>
+            <tr>
+                <th><input type="checkbox" id="select-all" aria-label="Select all"></th>
+                <th>From</th>
+                <th>Subject</th>
+                <th>Date</th>
+                <th>Size</th>
+                <th>Labels</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for msg in messages %}
+            <tr class="{{ 'row--unread' if msg.is_unread else '' }}">
+                <td><input type="checkbox" name="message_ids" value="{{ msg.id }}"
+                           aria-label="Select message"></td>
+                <td class="cell--sender" title="{{ msg.sender }}">
+                    {{ msg.sender_domain }}
+                </td>
+                <td class="cell--subject">
+                    {{ msg.subject or '(no subject)' }}
+                </td>
+                <td class="cell--date" title="{{ msg.internal_date | format_datetime }} UTC">
+                    {{ msg.age_days | age_label }} ago
+                </td>
+                <td class="cell--size">{{ msg.size_estimate | format_size }}</td>
+                <td class="cell--labels">
+                    {% for lid in msg.label_ids %}
+                        {% if not lid.startswith('CATEGORY_') and lid not in
+                              ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED',
+                               'IMPORTANT','UNREAD'] %}
+                        <span class="label-chip">{{ lid }}</span>
+                        {% endif %}
+                    {% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{# ── Pagination ────────────────────────────────────────────────────────────── #}
+{% if total_pages > 1 %}
+<nav class="pagination" aria-label="Inbox pagination">
+    {% if page > 1 %}
+    <a class="pagination__btn" href="{{ url_for('main.inbox', page=page-1, per_page=per_page) }}">
+        ← Previous
+    </a>
+    {% endif %}
+
+    <span class="pagination__info">
+        Page {{ page }} of {{ total_pages }}
+        &nbsp;({{ total_count }} messages)
+    </span>
+
+    {% if page < total_pages %}
+    <a class="pagination__btn" href="{{ url_for('main.inbox', page=page+1, per_page=per_page) }}">
+        Next →
+    </a>
+    {% endif %}
+</nav>
+{% endif %}
+
+{% else %}
+<div class="empty-state empty-state--success">
+    <div class="empty-state__icon">✓</div>
+    <h2>Inbox Zero reached!</h2>
+    <p>Your inbox is empty. Well done.</p>
+</div>
+{% endif %}
+{% endblock %}

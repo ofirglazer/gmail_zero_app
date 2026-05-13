@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Settings — Gmail Zero{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Settings</h1>
+</div>
+
+{# ── Environment summary ─────────────────────────────────────────────────────── #}
+<section class="settings-section">
+    <h2>Environment</h2>
+    <table class="settings-table">
+        <tbody>
+            <tr>
+                <th>Mode</th>
+                <td>
+                    <span class="badge {% if settings_summary.env == 'demo' %}badge--demo{% else %}badge--prod{% endif %}">
+                        {{ settings_summary.env }}
+                    </span>
+                </td>
+            </tr>
+            <tr><th>Database</th><td><code>{{ settings_summary.db_path }}</code></td></tr>
+            <tr><th>Host</th><td><code>{{ settings_summary.host }}:{{ settings_summary.port }}</code></td></tr>
+            <tr><th>Sync batch size</th><td>{{ settings_summary.sync_batch_size }} messages</td></tr>
+            <tr><th>Rate limit delay</th><td>{{ settings_summary.sync_rate_limit_delay_ms }} ms</td></tr>
+            <tr>
+                <th>Large threshold</th>
+                <td>{{ settings_summary.large_threshold | format_size }}</td>
+            </tr>
+            <tr>
+                <th>Very large threshold</th>
+                <td>{{ settings_summary.very_large_threshold | format_size }}</td>
+            </tr>
+            <tr>
+                <th>Old thread threshold</th>
+                <td>{{ settings_summary.old_thread_threshold_days }} days</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+
+{# ── Sync history ────────────────────────────────────────────────────────────── #}
+<section class="settings-section">
+    <h2>Sync History</h2>
+    {% if recent_syncs %}
+    <table class="msg-table" aria-label="Recent sync history">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Type</th>
+                <th>Completed</th>
+                <th>Messages synced</th>
+                <th>History ID</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sync in recent_syncs %}
+            <tr>
+                <td>{{ sync.id or '—' }}</td>
+                <td>
+                    <span class="badge {% if sync.is_full_sync %}badge--full{% else %}badge--incr{% endif %}">
+                        {{ sync.sync_type.value }}
+                    </span>
+                </td>
+                <td>{{ sync.last_synced_at | format_datetime }} UTC</td>
+                <td>{{ sync.messages_synced }}</td>
+                <td><code>{{ sync.history_id }}</code></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>No syncs have run yet.</p>
+    </div>
+    {% endif %}
+</section>
+
+{# ── Label registry ──────────────────────────────────────────────────────────── #}
+<section class="settings-section">
+    <h2>Label Registry
+        <span class="count-badge">{{ labels | length }}</span>
+    </h2>
+    {% if labels %}
+    <table class="msg-table" aria-label="Label registry">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Type</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lbl in labels %}
+            <tr class="{{ 'row--app-label' if lbl.is_app_managed else '' }}">
+                <td><code>{{ lbl.id }}</code></td>
+                <td>
+                    {{ lbl.name }}
+                    {% if lbl.is_app_managed %}
+                    <span class="badge badge--app">app</span>
+                    {% endif %}
+                </td>
+                <td>{{ lbl.label_type.value }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>No labels synced yet. Run a sync to populate the label registry.</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

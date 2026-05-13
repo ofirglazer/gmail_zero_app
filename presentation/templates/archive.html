@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Archive Zero — Gmail Zero{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Archive Zero
+        <span class="count-badge">{{ total_count }}</span>
+    </h1>
+    <p class="page-desc">
+        Archived messages with no custom label. Group by domain to label in bulk (Step 7).
+    </p>
+</div>
+
+{% if messages %}
+
+{# ── Domain groups ─────────────────────────────────────────────────────────── #}
+{% for domain, domain_msgs in grouped_by_domain.items() %}
+<section class="domain-group">
+    <div class="domain-group__header">
+        <h2 class="domain-group__name">{{ domain }}</h2>
+        <span class="count-badge">{{ domain_msgs | length }}</span>
+    </div>
+
+    <div class="table-wrapper">
+        <table class="msg-table" aria-label="Messages from {{ domain }}">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" class="select-domain"
+                               data-domain="{{ domain }}"
+                               aria-label="Select all from {{ domain }}"></th>
+                    <th>From</th>
+                    <th>Subject</th>
+                    <th>Date</th>
+                    <th>Size</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for msg in domain_msgs %}
+                <tr>
+                    <td><input type="checkbox" name="message_ids" value="{{ msg.id }}"
+                               data-domain="{{ domain }}"
+                               aria-label="Select message"></td>
+                    <td class="cell--sender" title="{{ msg.sender }}">
+                        {{ msg.sender_domain }}
+                    </td>
+                    <td class="cell--subject">
+                        {{ msg.subject or '(no subject)' }}
+                    </td>
+                    <td class="cell--date" title="{{ msg.internal_date | format_datetime }} UTC">
+                        {{ msg.age_days | age_label }} ago
+                    </td>
+                    <td class="cell--size">{{ msg.size_estimate | format_size }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endfor %}
+
+{% else %}
+<div class="empty-state empty-state--success">
+    <div class="empty-state__icon">✓</div>
+    <h2>Archive Zero reached!</h2>
+    <p>Every archived message has a custom label.</p>
+</div>
+{% endif %}
+{% endblock %}

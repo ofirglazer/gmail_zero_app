@@ -56,11 +56,11 @@ class DashboardSummary:
 
     @property
     def total_size_gb(self) -> float:
-        return round(self.total_size_bytes / (1024 ** 3), 3)
+        return round(self.total_size_bytes / (1024**3), 3)
 
     @property
     def inbox_size_mb(self) -> float:
-        return round(self.inbox_size_bytes / (1024 ** 2), 2)
+        return round(self.inbox_size_bytes / (1024**2), 2)
 
     @property
     def has_ever_synced(self) -> bool:

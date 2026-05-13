@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Gmail Zero{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+{% if is_demo %}
+<div class="demo-banner">
+    ⚠️ DEMO MODE — Using synthetic data. No real Gmail connection.
+</div>
+{% endif %}
+
+<nav class="site-nav">
+    <div class="nav-brand">Gmail Zero</div>
+    <ul class="nav-links">
+        <li>
+            <a href="{{ url_for('main.dashboard') }}"
+               class="{{ 'active' if request_endpoint == 'main.dashboard' else '' }}">
+               Dashboard
+            </a>
+        </li>
+        <li>
+            <a href="{{ url_for('main.inbox') }}"
+               class="{{ 'active' if request_endpoint == 'main.inbox' else '' }}">
+               Inbox Zero
+            </a>
+        </li>
+        <li>
+            <a href="{{ url_for('main.archive') }}"
+               class="{{ 'active' if request_endpoint == 'main.archive' else '' }}">
+               Archive Zero
+            </a>
+        </li>
+        <li>
+            <a href="{{ url_for('main.sent') }}"
+               class="{{ 'active' if request_endpoint == 'main.sent' else '' }}">
+               Sent Zero
+            </a>
+        </li>
+        <li>
+            <a href="{{ url_for('main.size') }}"
+               class="{{ 'active' if request_endpoint == 'main.size' else '' }}">
+               Size Zero
+            </a>
+        </li>
+        <li>
+            <a href="{{ url_for('main.search') }}"
+               class="{{ 'active' if request_endpoint == 'main.search' else '' }}">
+               Search
+            </a>
+        </li>
+        <li>
+            <a href="{{ url_for('main.settings_page') }}"
+               class="{{ 'active' if request_endpoint == 'main.settings_page' else '' }}">
+               Settings
+            </a>
+        </li>
+    </ul>
+</nav>
+
+<main class="site-main">
+    {% block content %}{% endblock %}
+</main>
+
+<footer class="site-footer">
+    <span>Gmail Zero</span>
+    {% if is_demo %}<span class="demo-label">Demo Mode</span>{% endif %}
+</footer>
+
+<script src="https://unpkg.com/htmx.org@1.9.10"
+        integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5ViYgSibmK"
+        crossorigin="anonymous"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

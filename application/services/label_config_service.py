@@ -39,12 +39,14 @@ if TYPE_CHECKING:
 
 # Sections in labels.toml whose values are label names to be managed.
 # [app] is excluded — it contains the namespace prefix, not a label name.
-_LABEL_SECTIONS: frozenset[str] = frozenset({
-    "workflow",
-    "classification",
-    "size",
-    "custom",
-})
+_LABEL_SECTIONS: frozenset[str] = frozenset(
+    {
+        "workflow",
+        "classification",
+        "size",
+        "custom",
+    }
+)
 
 
 class LabelConfigService:
@@ -93,8 +95,7 @@ class LabelConfigService:
         # Fetch existing Gmail labels and build a name → id lookup
         existing_response = self._client.list_labels()
         existing_by_name: dict[str, str] = {
-            lbl["name"]: lbl["id"]
-            for lbl in existing_response.get("labels", [])
+            lbl["name"]: lbl["id"] for lbl in existing_response.get("labels", [])
         }
 
         for config_key, label_name in managed_labels.items():

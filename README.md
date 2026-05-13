@@ -4,7 +4,8 @@
 * explain or fix each error in mypy check.
 * Show class, data flow, sequence and ladder UML diagrams.
 * what is the difference between message.py def is_large and GMAIL_ZERO_LARGE_MESSAGE_THRESHOLD_BYTES?
-* Finish Step 4 implementation.
+* Finish Step 7 implementation.
+
 
 
 ## for production 

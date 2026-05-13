@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Size Zero — Gmail Zero{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Size Zero</h1>
+    <p class="page-desc">
+        Total mailbox size: <strong>{{ total_size_gb }} GB</strong>
+        ({{ total_size_bytes | format_size }}).
+        The 100 largest messages are shown below.
+    </p>
+</div>
+
+{% if messages %}
+<div class="table-wrapper">
+    <table class="msg-table" aria-label="Largest messages">
+        <thead>
+            <tr>
+                <th><input type="checkbox" id="select-all" aria-label="Select all"></th>
+                <th>From</th>
+                <th>Subject</th>
+                <th>Location</th>
+                <th>Date</th>
+                <th>Size</th>
+                <th>Labels</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for msg in messages %}
+            <tr class="{{ 'row--very-large' if msg.size_estimate >= 15*1024*1024
+                           else 'row--large' if msg.size_estimate >= 5*1024*1024
+                           else '' }}">
+                <td><input type="checkbox" name="message_ids" value="{{ msg.id }}"
+                           aria-label="Select message"></td>
+                <td class="cell--sender" title="{{ msg.sender }}">
+                    {{ msg.sender_domain }}
+                </td>
+                <td class="cell--subject">
+                    {{ msg.subject or '(no subject)' }}
+                </td>
+                <td class="cell--location">
+                    {% if msg.is_inbox %}
+                        <span class="loc-badge loc-badge--inbox">Inbox</span>
+                    {% elif msg.is_sent %}
+                        <span class="loc-badge loc-badge--sent">Sent</span>
+                    {% else %}
+                        <span class="loc-badge loc-badge--archive">Archive</span>
+                    {% endif %}
+                </td>
+                <td class="cell--date" title="{{ msg.internal_date | format_datetime }} UTC">
+                    {{ msg.age_days | age_label }} ago
+                </td>
+                <td class="cell--size cell--size-large">
+                    {{ msg.size_estimate | format_size }}
+                </td>
+                <td class="cell--labels">
+                    {% for lid in msg.label_ids %}
+                        {% if not lid.startswith('CATEGORY_') and lid not in
+                              ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED',
+                               'IMPORTANT','UNREAD'] %}
+                        <span class="label-chip">{{ lid }}</span>
+                        {% endif %}
+                    {% endfor %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<p class="table-note">
+    Rows highlighted in <span class="row--very-large sample-swatch">orange</span>
+    exceed 15 MB. Rows in <span class="row--large sample-swatch">yellow</span>
+    exceed 5 MB. Delete these messages directly in Gmail to reclaim space.
+</p>
+
+{% else %}
+<div class="empty-state">
+    <p>No messages found. Run a sync to populate data.</p>
+</div>
+{% endif %}
+{% endblock %}
