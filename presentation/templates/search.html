@@ -1,177 +1,131 @@
 {% extends "base.html" %}
 {% block title %}Search — Gmail Zero{% endblock %}
-
 {% block content %}
-<div class="page-header">
-    <h1>Search</h1>
+<div class="page-header ani">
+  <div class="page-header-left">
+    <span class="page-eyebrow">Tools</span>
+    <h1 class="page-title">Search</h1>
+    <p class="page-desc">Filter messages by any combination of criteria.</p>
+  </div>
 </div>
 
-{# ── Filter form — GET so filters appear in the URL ──────────────────────────── #}
-<div class="search-form-wrapper">
-    <form class="search-form" method="get" action="{{ url_for('main.search') }}">
-
-        <div class="form-row">
-            <div class="form-group">
-                <label for="sender">Sender</label>
-                <input id="sender" type="text" name="sender"
-                       value="{{ filters.sender }}" placeholder="name or address">
-            </div>
-            <div class="form-group">
-                <label for="sender_domain">Domain</label>
-                <input id="sender_domain" type="text" name="sender_domain"
-                       value="{{ filters.sender_domain }}" placeholder="github.com">
-            </div>
-            <div class="form-group">
-                <label for="subject_contains">Subject contains</label>
-                <input id="subject_contains" type="text" name="subject_contains"
-                       value="{{ filters.subject_contains }}" placeholder="keyword">
-            </div>
-        </div>
-
-        <div class="form-row">
-            <div class="form-group">
-                <label for="label_id">Label</label>
-                <select id="label_id" name="label_id">
-                    <option value="">— any —</option>
-                    {% for lbl in user_labels %}
-                    <option value="{{ lbl.id }}"
-                            {{ 'selected' if filters.label_id == lbl.id else '' }}>
-                        {{ lbl.name }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="form-group">
-                <label for="date_from">Date from</label>
-                <input id="date_from" type="date" name="date_from"
-                       value="{{ filters.date_from }}">
-            </div>
-            <div class="form-group">
-                <label for="date_to">Date to</label>
-                <input id="date_to" type="date" name="date_to"
-                       value="{{ filters.date_to }}">
-            </div>
-            <div class="form-group">
-                <label for="min_size_bytes">Min size (bytes)</label>
-                <input id="min_size_bytes" type="number" name="min_size_bytes"
-                       value="{{ filters.min_size_bytes }}" placeholder="5242880">
-            </div>
-        </div>
-
-        <div class="form-row form-row--flags">
-            <label class="checkbox-label">
-                <input type="checkbox" name="is_inbox" value="1"
-                       {{ 'checked' if filters.is_inbox == '1' else '' }}>
-                Inbox only
-            </label>
-            <label class="checkbox-label">
-                <input type="checkbox" name="is_sent" value="1"
-                       {{ 'checked' if filters.is_sent == '1' else '' }}>
-                Sent only
-            </label>
-            <label class="checkbox-label">
-                <input type="checkbox" name="is_unread" value="1"
-                       {{ 'checked' if filters.is_unread == '1' else '' }}>
-                Unread only
-            </label>
-        </div>
-
-        <div class="form-actions">
-            <button type="submit" class="btn btn--primary">Search</button>
-            <a href="{{ url_for('main.search') }}" class="btn btn--secondary">Clear</a>
-        </div>
-
-    </form>
+<div class="form-card ani">
+  <form method="get" action="{{ url_for('main.search') }}">
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label" for="sender">Sender</label>
+        <input class="form-input" id="sender" type="text" name="sender" value="{{ filters.sender }}" placeholder="name or address">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sender_domain">Domain</label>
+        <input class="form-input" id="sender_domain" type="text" name="sender_domain" value="{{ filters.sender_domain }}" placeholder="github.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="subject_contains">Subject contains</label>
+        <input class="form-input" id="subject_contains" type="text" name="subject_contains" value="{{ filters.subject_contains }}" placeholder="keyword">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="label_id">Label</label>
+        <select class="form-select" id="label_id" name="label_id">
+          <option value="">— any —</option>
+          {% for lbl in user_labels %}
+          <option value="{{ lbl.id }}" {{ 'selected' if filters.label_id == lbl.id else '' }}>{{ lbl.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="date_from">Date from</label>
+        <input class="form-input" id="date_from" type="date" name="date_from" value="{{ filters.date_from }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="date_to">Date to</label>
+        <input class="form-input" id="date_to" type="date" name="date_to" value="{{ filters.date_to }}">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="min_size_bytes">Min size (bytes)</label>
+        <input class="form-input" id="min_size_bytes" type="number" name="min_size_bytes" value="{{ filters.min_size_bytes }}" placeholder="5242880">
+      </div>
+    </div>
+    <div class="form-flags">
+      <label class="check-label"><input type="checkbox" name="is_inbox" value="1" {{ 'checked' if filters.is_inbox == '1' }}> Inbox only</label>
+      <label class="check-label"><input type="checkbox" name="is_sent" value="1" {{ 'checked' if filters.is_sent == '1' }}> Sent only</label>
+      <label class="check-label"><input type="checkbox" name="is_unread" value="1" {{ 'checked' if filters.is_unread == '1' }}> Unread only</label>
+    </div>
+    <div class="form-actions" style="margin-top:16px">
+      <button type="submit" class="btn btn-primary">Search</button>
+      <a href="{{ url_for('main.search') }}" class="btn btn-ghost">Clear</a>
+    </div>
+  </form>
 </div>
 
-{# ── Results ──────────────────────────────────────────────────────────────── #}
-{% if total_count is defined %}
-<div class="results-header">
-    <span class="results-count">{{ total_count }} message{{ 's' if total_count != 1 else '' }} found</span>
+{% if total_count is defined and request.args %}
+<div class="results-meta ani">
+  <span class="results-count">{{ total_count }} message{{ 's' if total_count != 1 }} found</span>
 </div>
-{% endif %}
 
 {% if messages %}
-<div class="table-wrapper">
-    <table class="msg-table" aria-label="Search results">
-        <thead>
-            <tr>
-                <th><input type="checkbox" id="select-all" aria-label="Select all"></th>
-                <th>From</th>
-                <th>Subject</th>
-                <th>Location</th>
-                <th>Date</th>
-                <th>Size</th>
-                <th>Labels</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for msg in messages %}
-            <tr class="{{ 'row--unread' if msg.is_unread else '' }}">
-                <td><input type="checkbox" name="message_ids" value="{{ msg.id }}"
-                           aria-label="Select message"></td>
-                <td class="cell--sender" title="{{ msg.sender }}">{{ msg.sender_domain }}</td>
-                <td class="cell--subject">{{ msg.subject or '(no subject)' }}</td>
-                <td class="cell--location">
-                    {% if msg.is_inbox %}Inbox
-                    {% elif msg.is_sent %}Sent
-                    {% else %}Archive{% endif %}
-                </td>
-                <td class="cell--date" title="{{ msg.internal_date | format_datetime }} UTC">
-                    {{ msg.age_days | age_label }} ago
-                </td>
-                <td class="cell--size">{{ msg.size_estimate | format_size }}</td>
-                <td class="cell--labels">
-                    {% for lid in msg.label_ids %}
-                        {% if not lid.startswith('CATEGORY_') and lid not in
-                              ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED',
-                               'IMPORTANT','UNREAD'] %}
-                        <span class="label-chip">{{ lid }}</span>
-                        {% endif %}
-                    {% endfor %}
-                </td>
-            </tr>
+<div class="table-card ani">
+  <div class="tbl-wrap">
+    <table class="dtable">
+      <thead>
+        <tr>
+          <th style="width:40px"><input type="checkbox" id="sel-all" aria-label="Select all"></th>
+          <th>From</th><th>Subject</th><th>Location</th><th>Age</th><th style="text-align:right">Size</th><th>Labels</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for msg in messages %}
+        <tr class="{{ 'row-unread' if msg.is_unread else '' }}">
+          <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
+          <td><span class="cell-sender" title="{{ msg.sender }}">{{ msg.sender_domain }}</span></td>
+          <td><span class="cell-subject">{{ msg.subject or '(no subject)' }}</span></td>
+          <td>
+            {% if msg.is_inbox %}<span class="loc-pill loc-inbox">Inbox</span>
+            {% elif msg.is_sent %}<span class="loc-pill loc-sent">Sent</span>
+            {% else %}<span class="loc-pill loc-archive">Archive</span>{% endif %}
+          </td>
+          <td><span class="cell-date">{{ msg.age_days | age_label }} ago</span></td>
+          <td><span class="cell-size">{{ msg.size_estimate | format_size }}</span></td>
+          <td>
+            {% for lid in msg.label_ids %}
+              {% if lid not in ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED','IMPORTANT','UNREAD'] and not lid.startswith('CATEGORY_') %}
+              <span class="chip chip-teal">{{ lid.split('/')[-1] }}</span>
+              {% endif %}
             {% endfor %}
-        </tbody>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
     </table>
+  </div>
+  {% if total_pages > 1 %}
+  <div class="pagination">
+    <span class="pag-info">Page {{ page }} of {{ total_pages }} · {{ total_count }} results</span>
+    <div class="pag-controls">
+      {% if page > 1 %}<a class="page-btn" href="{{ url_for('main.search', page=page-1, per_page=per_page, sender=filters.sender, sender_domain=filters.sender_domain, subject_contains=filters.subject_contains, label_id=filters.label_id, date_from=filters.date_from, date_to=filters.date_to, is_inbox=filters.is_inbox, is_sent=filters.is_sent, is_unread=filters.is_unread) }}">← Prev</a>{% endif %}
+      <span class="page-btn page-btn-active">{{ page }}</span>
+      {% if page < total_pages %}<a class="page-btn" href="{{ url_for('main.search', page=page+1, per_page=per_page, sender=filters.sender, sender_domain=filters.sender_domain, subject_contains=filters.subject_contains, label_id=filters.label_id, date_from=filters.date_from, date_to=filters.date_to, is_inbox=filters.is_inbox, is_sent=filters.is_sent, is_unread=filters.is_unread) }}">Next →</a>{% endif %}
+    </div>
+  </div>
+  {% endif %}
 </div>
-
-{# ── Pagination ─────────────────────────────────────────────────────────────── #}
-{% if total_pages > 1 %}
-<nav class="pagination" aria-label="Search results pagination">
-    {% if page > 1 %}
-    <a class="pagination__btn"
-       href="{{ url_for('main.search', page=page-1, per_page=per_page,
-                        sender=filters.sender, sender_domain=filters.sender_domain,
-                        subject_contains=filters.subject_contains,
-                        label_id=filters.label_id, date_from=filters.date_from,
-                        date_to=filters.date_to, is_inbox=filters.is_inbox,
-                        is_sent=filters.is_sent, is_unread=filters.is_unread) }}">
-        ← Previous
-    </a>
-    {% endif %}
-
-    <span class="pagination__info">Page {{ page }} of {{ total_pages }}</span>
-
-    {% if page < total_pages %}
-    <a class="pagination__btn"
-       href="{{ url_for('main.search', page=page+1, per_page=per_page,
-                        sender=filters.sender, sender_domain=filters.sender_domain,
-                        subject_contains=filters.subject_contains,
-                        label_id=filters.label_id, date_from=filters.date_from,
-                        date_to=filters.date_to, is_inbox=filters.is_inbox,
-                        is_sent=filters.is_sent, is_unread=filters.is_unread) }}">
-        Next →
-    </a>
-    {% endif %}
-</nav>
-{% endif %}
-
-{% elif request.args %}
-{# Form was submitted but returned no results #}
-<div class="empty-state">
-    <p>No messages match your search. Try adjusting the filters.</p>
+{% else %}
+<div class="empty ani">
+  <div class="empty-icon">🔍</div>
+  <div class="empty-title">No results</div>
+  <div class="empty-desc">No messages match your search. Try adjusting the filters.</div>
 </div>
 {% endif %}
+{% endif %}
+{% endblock %}
 
+{% block scripts %}
+<script>
+// Uncheck all when "select all" is clicked
+document.querySelectorAll('#sel-all').forEach(el => {
+  el.addEventListener('change', e => {
+    document.querySelectorAll('input[name="message_ids"]').forEach(cb => cb.checked = e.target.checked);
+  });
+});
+</script>
 {% endblock %}

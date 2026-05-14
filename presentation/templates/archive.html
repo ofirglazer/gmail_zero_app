@@ -1,68 +1,49 @@
 {% extends "base.html" %}
 {% block title %}Archive Zero — Gmail Zero{% endblock %}
-
 {% block content %}
-<div class="page-header">
-    <h1>Archive Zero
-        <span class="count-badge">{{ total_count }}</span>
-    </h1>
-    <p class="page-desc">
-        Archived messages with no custom label. Group by domain to label in bulk (Step 7).
-    </p>
+<div class="page-header ani">
+  <div class="page-header-left">
+    <span class="page-eyebrow">Workflow</span>
+    <h1 class="page-title">Archive Zero <span class="page-count">{{ total_count }}</span></h1>
+    <p class="page-desc">Archived messages with no custom label, grouped by sender domain.</p>
+  </div>
 </div>
 
 {% if messages %}
-
-{# ── Domain groups ─────────────────────────────────────────────────────────── #}
-{% for domain, domain_msgs in grouped_by_domain.items() %}
-<section class="domain-group">
-    <div class="domain-group__header">
-        <h2 class="domain-group__name">{{ domain }}</h2>
-        <span class="count-badge">{{ domain_msgs | length }}</span>
+  {% for domain, domain_msgs in grouped_by_domain.items() %}
+  <div class="domain-section ani">
+    <div class="domain-hdr">
+      <span class="domain-name">{{ domain }}</span>
+      <span class="domain-count">{{ domain_msgs | length }}</span>
     </div>
-
-    <div class="table-wrapper">
-        <table class="msg-table" aria-label="Messages from {{ domain }}">
-            <thead>
-                <tr>
-                    <th><input type="checkbox" class="select-domain"
-                               data-domain="{{ domain }}"
-                               aria-label="Select all from {{ domain }}"></th>
-                    <th>From</th>
-                    <th>Subject</th>
-                    <th>Date</th>
-                    <th>Size</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for msg in domain_msgs %}
-                <tr>
-                    <td><input type="checkbox" name="message_ids" value="{{ msg.id }}"
-                               data-domain="{{ domain }}"
-                               aria-label="Select message"></td>
-                    <td class="cell--sender" title="{{ msg.sender }}">
-                        {{ msg.sender_domain }}
-                    </td>
-                    <td class="cell--subject">
-                        {{ msg.subject or '(no subject)' }}
-                    </td>
-                    <td class="cell--date" title="{{ msg.internal_date | format_datetime }} UTC">
-                        {{ msg.age_days | age_label }} ago
-                    </td>
-                    <td class="cell--size">{{ msg.size_estimate | format_size }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div class="domain-body">
+      <table class="dtable">
+        <thead>
+          <tr>
+            <th style="width:40px"><input type="checkbox" aria-label="Select all from {{ domain }}"></th>
+            <th>From</th><th>Subject</th><th>Age</th><th>Size</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for msg in domain_msgs %}
+          <tr>
+            <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
+            <td><span class="cell-sender" title="{{ msg.sender }}">{{ msg.sender_domain }}</span></td>
+            <td><span class="cell-subject">{{ msg.subject or '(no subject)' }}</span></td>
+            <td><span class="cell-date">{{ msg.age_days | age_label }} ago</span></td>
+            <td><span class="cell-size">{{ msg.size_estimate | format_size }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-</section>
-{% endfor %}
-
+  </div>
+  {% endfor %}
 {% else %}
-<div class="empty-state empty-state--success">
-    <div class="empty-state__icon">✓</div>
-    <h2>Archive Zero reached!</h2>
-    <p>Every archived message has a custom label.</p>
+<div class="empty empty--success ani">
+  <div class="empty-icon">✓</div>
+  <div class="empty-title">Archive Zero achieved!</div>
+  <div class="empty-desc">Every archived message has a custom label.</div>
 </div>
 {% endif %}
 {% endblock %}

@@ -1,10 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Error {{ code }} — Gmail Zero{% endblock %}
-
 {% block content %}
-<div class="error-page">
-    <div class="error-page__code">{{ code }}</div>
-    <div class="error-page__message">{{ error }}</div>
-    <a class="btn btn--primary" href="{{ url_for('main.dashboard') }}">Return to Dashboard</a>
+<div class="error-shell">
+  <div class="error-code">{{ code }}</div>
+  <div class="error-msg">{{ error }}</div>
+  <a class="btn btn-primary" href="{{ url_for('main.dashboard') }}" style="margin-top:8px">← Back to Dashboard</a>
 </div>
 {% endblock %}

@@ -1,82 +1,67 @@
 {% extends "base.html" %}
 {% block title %}Size Zero — Gmail Zero{% endblock %}
-
 {% block content %}
-<div class="page-header">
-    <h1>Size Zero</h1>
-    <p class="page-desc">
-        Total mailbox size: <strong>{{ total_size_gb }} GB</strong>
-        ({{ total_size_bytes | format_size }}).
-        The 100 largest messages are shown below.
-    </p>
+<div class="page-header ani">
+  <div class="page-header-left">
+    <span class="page-eyebrow">Workflow</span>
+    <h1 class="page-title">Size Zero <span class="page-count">{{ total_size_gb }} GB</span></h1>
+    <p class="page-desc">The 100 largest messages across all locations. Delete them directly in Gmail to reclaim space.</p>
+  </div>
 </div>
 
 {% if messages %}
-<div class="table-wrapper">
-    <table class="msg-table" aria-label="Largest messages">
-        <thead>
-            <tr>
-                <th><input type="checkbox" id="select-all" aria-label="Select all"></th>
-                <th>From</th>
-                <th>Subject</th>
-                <th>Location</th>
-                <th>Date</th>
-                <th>Size</th>
-                <th>Labels</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for msg in messages %}
-            <tr class="{{ 'row--very-large' if msg.size_estimate >= 15*1024*1024
-                           else 'row--large' if msg.size_estimate >= 5*1024*1024
-                           else '' }}">
-                <td><input type="checkbox" name="message_ids" value="{{ msg.id }}"
-                           aria-label="Select message"></td>
-                <td class="cell--sender" title="{{ msg.sender }}">
-                    {{ msg.sender_domain }}
-                </td>
-                <td class="cell--subject">
-                    {{ msg.subject or '(no subject)' }}
-                </td>
-                <td class="cell--location">
-                    {% if msg.is_inbox %}
-                        <span class="loc-badge loc-badge--inbox">Inbox</span>
-                    {% elif msg.is_sent %}
-                        <span class="loc-badge loc-badge--sent">Sent</span>
-                    {% else %}
-                        <span class="loc-badge loc-badge--archive">Archive</span>
-                    {% endif %}
-                </td>
-                <td class="cell--date" title="{{ msg.internal_date | format_datetime }} UTC">
-                    {{ msg.age_days | age_label }} ago
-                </td>
-                <td class="cell--size cell--size-large">
-                    {{ msg.size_estimate | format_size }}
-                </td>
-                <td class="cell--labels">
-                    {% for lid in msg.label_ids %}
-                        {% if not lid.startswith('CATEGORY_') and lid not in
-                              ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED',
-                               'IMPORTANT','UNREAD'] %}
-                        <span class="label-chip">{{ lid }}</span>
-                        {% endif %}
-                    {% endfor %}
-                </td>
-            </tr>
+<div class="table-card ani">
+  <div class="table-card-hdr">
+    <span class="table-card-title">
+      Largest messages
+      <span class="chip chip-neutral">{{ total_size_bytes | format_size }} total</span>
+    </span>
+    <div style="display:flex;gap:10px;font-size:.73rem;color:var(--text-muted)">
+      <span><span style="display:inline-block;width:10px;height:10px;background:rgba(245,158,11,.4);border-radius:2px;margin-right:4px"></span>&gt;5 MB</span>
+      <span><span style="display:inline-block;width:10px;height:10px;background:rgba(239,68,68,.4);border-radius:2px;margin-right:4px"></span>&gt;15 MB</span>
+    </div>
+  </div>
+  <div class="tbl-wrap">
+    <table class="dtable">
+      <thead>
+        <tr>
+          <th style="width:40px"><input type="checkbox" id="sel-all" aria-label="Select all"></th>
+          <th>From</th><th>Subject</th><th>Location</th><th>Age</th><th style="text-align:right">Size</th><th>Labels</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for msg in messages %}
+        {% set is_xl = msg.size_estimate >= 15*1024*1024 %}
+        {% set is_lg = msg.size_estimate >= 5*1024*1024 and not is_xl %}
+        <tr class="{{ 'row-very-large' if is_xl else 'row-large' if is_lg else '' }}">
+          <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
+          <td><span class="cell-sender" title="{{ msg.sender }}">{{ msg.sender_domain }}</span></td>
+          <td><span class="cell-subject">{{ msg.subject or '(no subject)' }}</span></td>
+          <td>
+            {% if msg.is_inbox %}<span class="loc-pill loc-inbox">Inbox</span>
+            {% elif msg.is_sent %}<span class="loc-pill loc-sent">Sent</span>
+            {% else %}<span class="loc-pill loc-archive">Archive</span>{% endif %}
+          </td>
+          <td><span class="cell-date">{{ msg.age_days | age_label }} ago</span></td>
+          <td><span class="cell-size {{ 'cell-size-xl' if is_xl else 'cell-size-lg' if is_lg else '' }}">{{ msg.size_estimate | format_size }}</span></td>
+          <td>
+            {% for lid in msg.label_ids %}
+              {% if lid not in ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED','IMPORTANT','UNREAD'] and not lid.startswith('CATEGORY_') %}
+              <span class="chip chip-neutral">{{ lid.split('/')[-1] }}</span>
+              {% endif %}
             {% endfor %}
-        </tbody>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
     </table>
+  </div>
 </div>
-
-<p class="table-note">
-    Rows highlighted in <span class="row--very-large sample-swatch">orange</span>
-    exceed 15 MB. Rows in <span class="row--large sample-swatch">yellow</span>
-    exceed 5 MB. Delete these messages directly in Gmail to reclaim space.
-</p>
-
 {% else %}
-<div class="empty-state">
-    <p>No messages found. Run a sync to populate data.</p>
+<div class="empty ani">
+  <div class="empty-icon">📭</div>
+  <div class="empty-title">No data yet</div>
+  <div class="empty-desc">Run a sync to populate size data.</div>
 </div>
 {% endif %}
 {% endblock %}

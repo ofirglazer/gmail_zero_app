@@ -1,68 +1,56 @@
 {% extends "base.html" %}
 {% block title %}Sent Zero — Gmail Zero{% endblock %}
-
 {% block content %}
-<div class="page-header">
-    <h1>Sent Zero
-        <span class="count-badge">{{ total_count }}</span>
-    </h1>
-    <p class="page-desc">
-        Sent messages without a workflow label. Mark each as Complete, Follow-Up,
-        or Awaiting Reply to reach Sent Zero.
-    </p>
+<div class="page-header ani">
+  <div class="page-header-left">
+    <span class="page-eyebrow">Workflow</span>
+    <h1 class="page-title">Sent Zero <span class="page-count">{{ total_count }}</span></h1>
+    <p class="page-desc">Sent messages without a workflow label — oldest first.</p>
+  </div>
 </div>
 
 {% if messages %}
-<div class="table-wrapper">
-    <table class="msg-table" aria-label="Sent messages">
-        <thead>
-            <tr>
-                <th><input type="checkbox" id="select-all" aria-label="Select all"></th>
-                <th>To</th>
-                <th>Subject</th>
-                <th>Date</th>
-                <th>Size</th>
-                <th>Labels</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for msg in messages %}
-            <tr>
-                <td><input type="checkbox" name="message_ids" value="{{ msg.id }}"
-                           aria-label="Select message"></td>
-                <td class="cell--sender" title="{{ msg.recipient or '' }}">
-                    {{ msg.recipient or '(unknown)' }}
-                </td>
-                <td class="cell--subject">
-                    {{ msg.subject or '(no subject)' }}
-                </td>
-                <td class="cell--date" title="{{ msg.internal_date | format_datetime }} UTC">
-                    {{ msg.age_days | age_label }} ago
-                </td>
-                <td class="cell--size">{{ msg.size_estimate | format_size }}</td>
-                <td class="cell--labels">
-                    {% for lid in msg.label_ids %}
-                        {% if not lid.startswith('CATEGORY_') and lid not in
-                              ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED',
-                               'IMPORTANT','UNREAD'] %}
-                        <span class="label-chip">{{ lid }}</span>
-                        {% endif %}
-                    {% endfor %}
-                    {% if msg.has_custom_label == false %}
-                    <span class="label-chip label-chip--missing">unlabelled</span>
-                    {% endif %}
-                </td>
-            </tr>
+<div class="table-card ani">
+  <div class="table-card-hdr">
+    <span class="table-card-title">Sent messages <span class="chip chip-amber">{{ total_count }} unresolved</span></span>
+  </div>
+  <div class="tbl-wrap">
+    <table class="dtable">
+      <thead>
+        <tr>
+          <th style="width:40px"><input type="checkbox" id="sel-all" aria-label="Select all"></th>
+          <th>To</th><th>Subject</th><th>Age</th><th>Size</th><th>Labels</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for msg in messages %}
+        <tr>
+          <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
+          <td><span class="cell-sender" title="{{ msg.recipient or '' }}">{{ msg.recipient or '(unknown)' }}</span></td>
+          <td><span class="cell-subject">{{ msg.subject or '(no subject)' }}</span></td>
+          <td><span class="cell-date">{{ msg.age_days | age_label }} ago</span></td>
+          <td><span class="cell-size">{{ msg.size_estimate | format_size }}</span></td>
+          <td>
+            {% set shown = namespace(any=false) %}
+            {% for lid in msg.label_ids %}
+              {% if lid not in ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED','IMPORTANT','UNREAD'] and not lid.startswith('CATEGORY_') %}
+              <span class="chip chip-violet">{{ lid.split('/')[-1] }}</span>
+              {% set shown.any = true %}
+              {% endif %}
             {% endfor %}
-        </tbody>
+            {% if not shown.any %}<span class="chip chip-missing">unlabelled</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
     </table>
+  </div>
 </div>
-
 {% else %}
-<div class="empty-state empty-state--success">
-    <div class="empty-state__icon">✓</div>
-    <h2>Sent Zero reached!</h2>
-    <p>All sent messages have been reviewed and labelled.</p>
+<div class="empty empty--success ani">
+  <div class="empty-icon">✓</div>
+  <div class="empty-title">Sent Zero achieved!</div>
+  <div class="empty-desc">All sent messages have been reviewed and labelled.</div>
 </div>
 {% endif %}
 {% endblock %}

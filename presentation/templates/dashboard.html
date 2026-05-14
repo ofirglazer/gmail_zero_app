@@ -2,157 +2,162 @@
 {% block title %}Dashboard — Gmail Zero{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <h1>Dashboard</h1>
+<div class="page-header ani">
+  <div class="page-header-left">
+    <span class="page-eyebrow">Overview</span>
+    <h1 class="page-title">Dashboard</h1>
+    <p class="page-desc">Track your progress toward all four zero goals.</p>
+  </div>
+  <div class="page-actions">
     {% if last_sync %}
-    <div class="sync-status">
-        Last sync: <strong>{{ last_sync.last_synced_at | format_datetime }} UTC</strong>
-        &mdash; {{ last_sync.sync_type.value }} &mdash;
-        {{ last_sync.messages_synced }} messages
+    <div class="sync-pill">
+      <span class="sdot sdot-green"></span>
+      Last sync {{ last_sync.last_synced_at | format_datetime }} UTC · {{ last_sync.sync_type.value }}
     </div>
     {% else %}
-    <div class="sync-status warning">
-        No sync has run yet. Data will appear after the first sync.
-    </div>
+    <div class="sync-pill sync-pill-warn">⚠ No sync yet</div>
     {% endif %}
+  </div>
 </div>
 
-{# ── Four goal cards ────────────────────────────────────────────────────────── #}
-<section class="goal-cards" aria-label="Goal status">
+{# ── Goal Cards ──────────────────────────────────────────────────────────── #}
+<div class="goal-grid">
 
-    <div class="card {% if summary.inbox_zero_reached %}card--success{% endif %}">
-        <h2 class="card__title">Inbox Zero</h2>
-        <div class="card__metric">{{ summary.inbox_count }}</div>
-        <div class="card__detail">messages in inbox</div>
-        <div class="card__sub">{{ summary.inbox_size_bytes | format_size }}</div>
-        {% if summary.inbox_zero_reached %}
-        <div class="badge badge--success">✓ Goal Reached</div>
-        {% else %}
-        <a class="card__action" href="{{ url_for('main.inbox') }}">Review →</a>
-        {% endif %}
+  <div class="goal-card goal-card--inbox {{ 'goal-card--success' if summary.inbox_zero_reached else '' }} ani ani-1">
+    <div class="goal-icon">📥</div>
+    <div class="goal-label">Inbox Zero</div>
+    <div class="goal-metric">{{ summary.inbox_count }}</div>
+    <div class="goal-sub">{{ summary.inbox_size_bytes | format_size }} in inbox</div>
+    <div class="goal-footer">
+      {% if summary.inbox_zero_reached %}
+      <span class="goal-reached">✓ Goal Reached</span>
+      {% else %}
+      <a class="goal-link" href="{{ url_for('main.inbox') }}">Review inbox →</a>
+      {% endif %}
     </div>
+  </div>
 
-    <div class="card {% if summary.archive_zero_reached %}card--success{% endif %}">
-        <h2 class="card__title">Archive Zero</h2>
-        <div class="card__metric">{{ summary.archive_unlabelled_count }}</div>
-        <div class="card__detail">unlabelled archived messages</div>
-        {% if summary.archive_zero_reached %}
-        <div class="badge badge--success">✓ Goal Reached</div>
-        {% else %}
-        <a class="card__action" href="{{ url_for('main.archive') }}">Review →</a>
-        {% endif %}
+  <div class="goal-card goal-card--archive {{ 'goal-card--success' if summary.archive_zero_reached else '' }} ani ani-2">
+    <div class="goal-icon">🗂</div>
+    <div class="goal-label">Archive Zero</div>
+    <div class="goal-metric">{{ summary.archive_unlabelled_count }}</div>
+    <div class="goal-sub">unlabelled archived messages</div>
+    <div class="goal-footer">
+      {% if summary.archive_zero_reached %}
+      <span class="goal-reached">✓ Goal Reached</span>
+      {% else %}
+      <a class="goal-link" href="{{ url_for('main.archive') }}">Review archive →</a>
+      {% endif %}
     </div>
+  </div>
 
-    <div class="card {% if summary.sent_zero_reached %}card--success{% endif %}">
-        <h2 class="card__title">Sent Zero</h2>
-        <div class="card__metric">{{ summary.sent_unresolved_count }}</div>
-        <div class="card__detail">sent messages needing follow-up</div>
-        {% if summary.sent_zero_reached %}
-        <div class="badge badge--success">✓ Goal Reached</div>
-        {% else %}
-        <a class="card__action" href="{{ url_for('main.sent') }}">Review →</a>
-        {% endif %}
+  <div class="goal-card goal-card--sent {{ 'goal-card--success' if summary.sent_zero_reached else '' }} ani ani-3">
+    <div class="goal-icon">📤</div>
+    <div class="goal-label">Sent Zero</div>
+    <div class="goal-metric">{{ summary.sent_unresolved_count }}</div>
+    <div class="goal-sub">sent messages needing follow-up</div>
+    <div class="goal-footer">
+      {% if summary.sent_zero_reached %}
+      <span class="goal-reached">✓ Goal Reached</span>
+      {% else %}
+      <a class="goal-link" href="{{ url_for('main.sent') }}">Review sent →</a>
+      {% endif %}
     </div>
+  </div>
 
-    <div class="card">
-        <h2 class="card__title">Size Zero</h2>
-        <div class="card__metric">{{ summary.total_size_gb }} GB</div>
-        <div class="card__detail">total mailbox size</div>
-        <div class="card__sub">{{ summary.custom_label_coverage_pct }}% messages labelled</div>
-        <a class="card__action" href="{{ url_for('main.size') }}">Review →</a>
+  <div class="goal-card goal-card--size ani ani-4">
+    <div class="goal-icon">💾</div>
+    <div class="goal-label">Size Zero</div>
+    <div class="goal-metric">{{ summary.total_size_gb }} <span style="font-size:1rem;opacity:.5">GB</span></div>
+    <div class="goal-sub">{{ summary.custom_label_coverage_pct | round(1) }}% of messages labelled</div>
+    <div class="goal-footer">
+      <a class="goal-link" href="{{ url_for('main.size') }}">View largest →</a>
     </div>
+  </div>
 
-</section>
+</div>
 
-{# ── Progress graphs ─────────────────────────────────────────────────────────── #}
-<section class="progress-section">
-    <h2>30-Day Progress</h2>
-    {% if snapshots %}
-    <div class="chart-container">
-        <canvas id="progressChart" width="900" height="320"
-                aria-label="30-day progress chart" role="img"></canvas>
+{# ── Progress Chart ──────────────────────────────────────────────────────── #}
+<div class="chart-card ani">
+  <div class="chart-card-hdr">
+    <div>
+      <div class="chart-card-title">30-Day Progress</div>
+      <div class="chart-card-sub">Messages across all four workflows over time</div>
     </div>
-    {% else %}
-    <div class="empty-state">
-        <p>No snapshot data yet. Progress graphs will appear after the first sync.</p>
+    <div class="chart-legend">
+      <div class="legend-item"><span class="legend-dot" style="background:#21cad2"></span>Inbox</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#8b5cf6"></span>Archive unlabelled</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>Sent unresolved</div>
     </div>
-    {% endif %}
-</section>
+  </div>
+  {% if snapshots %}
+  <div class="chart-box">
+    <canvas id="progressChart" aria-label="30-day progress" role="img"></canvas>
+  </div>
+  {% else %}
+  <div class="empty" style="border:none;padding:40px 0">
+    <div class="empty-desc">Progress data appears after the first sync.</div>
+  </div>
+  {% endif %}
+</div>
 
-{# ── Old threads panel ───────────────────────────────────────────────────────── #}
 {% if summary.old_inbox_thread_count > 0 %}
-<section class="old-threads-panel">
-    <h2>Old Inbox Threads
-        <span class="badge badge--warning">{{ summary.old_inbox_thread_count }}</span>
-    </h2>
-    <p>
-        {{ summary.old_inbox_thread_count }} inbox thread(s) have not had activity
-        in over {{ 30 }} days. Consider resolving or labelling them.
-    </p>
-    <a href="{{ url_for('main.inbox') }}">View inbox →</a>
-</section>
+<div class="table-card ani" style="padding:20px 22px;margin-bottom:0">
+  <div style="display:flex;align-items:center;gap:12px">
+    <span style="font-size:1.1rem">⏰</span>
+    <div>
+      <div style="font-weight:700;font-size:.88rem">{{ summary.old_inbox_thread_count }} old inbox thread{{ 's' if summary.old_inbox_thread_count != 1 }}</div>
+      <div style="font-size:.78rem;color:var(--text-muted);margin-top:2px">Threads with no activity in over 30 days.</div>
+    </div>
+    <a class="btn btn-secondary btn-sm" href="{{ url_for('main.inbox') }}" style="margin-left:auto">View inbox</a>
+  </div>
+</div>
 {% endif %}
-
 {% endblock %}
 
 {% block scripts %}
 {% if snapshots %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-// Fetch progress data from the JSON API and render the Chart.js line chart.
-fetch('/api/v1/progress')
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (!data.snapshots || data.snapshots.length === 0) return;
-        var ctx = document.getElementById('progressChart').getContext('2d');
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: data.snapshots.map(function(s) { return s.date; }),
-                datasets: [
-                    {
-                        label: 'Inbox',
-                        data: data.snapshots.map(function(s) { return s.inbox_count; }),
-                        borderColor: '#1976D2',
-                        backgroundColor: 'rgba(25,118,210,0.08)',
-                        tension: 0.3,
-                        fill: true,
-                    },
-                    {
-                        label: 'Archive Unlabelled',
-                        data: data.snapshots.map(function(s) { return s.archive_unlabelled_count; }),
-                        borderColor: '#D32F2F',
-                        backgroundColor: 'rgba(211,47,47,0.08)',
-                        tension: 0.3,
-                        fill: true,
-                    },
-                    {
-                        label: 'Sent Unresolved',
-                        data: data.snapshots.map(function(s) { return s.sent_unresolved_count; }),
-                        borderColor: '#388E3C',
-                        backgroundColor: 'rgba(56,142,60,0.08)',
-                        tension: 0.3,
-                        fill: true,
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                interaction: { mode: 'index', intersect: false },
-                plugins: {
-                    legend: { position: 'top' },
-                    tooltip: { mode: 'index' }
-                },
-                scales: {
-                    x: { title: { display: true, text: 'Date' } },
-                    y: { beginAtZero: true, title: { display: true, text: 'Messages' } }
-                }
-            }
-        });
-    })
-    .catch(function(err) {
-        console.error('Failed to load progress data:', err);
-    });
+fetch('/api/v1/progress').then(r=>r.json()).then(data=>{
+  if(!data.snapshots||!data.snapshots.length) return;
+  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(15,23,42,.06)';
+  const labelColor = isDark ? 'rgba(255,255,255,.4)' : '#8097b4';
+  const ctx = document.getElementById('progressChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.snapshots.map(s=>s.date),
+      datasets: [
+        {label:'Inbox',data:data.snapshots.map(s=>s.inbox_count),
+         borderColor:'#21cad2',backgroundColor:'rgba(33,202,210,.08)',
+         borderWidth:2,pointRadius:3,pointBackgroundColor:'#21cad2',tension:.4,fill:true},
+        {label:'Archive unlabelled',data:data.snapshots.map(s=>s.archive_unlabelled_count),
+         borderColor:'#8b5cf6',backgroundColor:'rgba(139,92,246,.08)',
+         borderWidth:2,pointRadius:3,pointBackgroundColor:'#8b5cf6',tension:.4,fill:true},
+        {label:'Sent unresolved',data:data.snapshots.map(s=>s.sent_unresolved_count),
+         borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,.08)',
+         borderWidth:2,pointRadius:3,pointBackgroundColor:'#f59e0b',tension:.4,fill:true},
+      ]
+    },
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{
+        backgroundColor:isDark?'#1e2535':'#fff',
+        titleColor:isDark?'#e8edf5':'#0d1117',
+        bodyColor:isDark?'#8097b4':'#5a7090',
+        borderColor:isDark?'rgba(255,255,255,.1)':'rgba(15,23,42,.1)',
+        borderWidth:1,padding:12,
+      }},
+      scales:{
+        x:{grid:{color:gridColor},ticks:{color:labelColor,font:{size:11}}},
+        y:{beginAtZero:true,grid:{color:gridColor},ticks:{color:labelColor,font:{size:11}}}
+      }
+    }
+  });
+}).catch(console.error);
 </script>
 {% endif %}
 {% endblock %}

@@ -169,8 +169,8 @@ class TestInbox:
 
     def test_inbox_shows_nav_active(self, synced_app):
         html = synced_app.get("/inbox").data.decode()
-        # The active nav link class appears for the inbox link
-        assert 'class="active"' in html
+        # The active nav link renders "nav-item active" on the inbox link
+        assert 'nav-item active' in html
 
 
 # ── Archive ───────────────────────────────────────────────────────────────────
