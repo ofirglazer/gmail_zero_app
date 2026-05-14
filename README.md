@@ -138,7 +138,7 @@ ruff format --diff .
 | 2    | Domain models & safety guard               | ✅ Complete |
 | 3    | Database layer (SQLAlchemy + repositories) | ✅ Complete |
 | 4    | Mock Gmail client & OAuth stub             | ✅ Complete  |
-| 5    | Sync engine & application services         | ⏳ Pending  |
-| 6    | Flask app & core routes (read-only)        | ⏳ Pending  |
+| 5    | Sync engine & application services         | ✅ Complete  |
+| 6    | Flask app & core routes (read-only)        | ✅ Complete  |
 | 7    | Labelling UI & bulk operations             | ⏳ Pending  |
 | 8    | Progress graphs, snapshots & hardening     | ⏳ Pending  |
