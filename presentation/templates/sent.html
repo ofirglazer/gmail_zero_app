@@ -44,7 +44,12 @@
         <tr>
           <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
           <td><span class="cell-sender" title="{{ msg.recipient or '' }}">{{ msg.recipient or '(unknown)' }}</span></td>
-          <td><span class="cell-subject">{{ msg.subject or '(no subject)' }}</span></td>
+          <td>
+            <span class="cell-subject">{{ msg.subject or '(no subject)' }}</span>
+            {% if msg.snippet %}
+            <span class="cell-snippet">{{ msg.snippet }}</span>
+            {% endif %}
+          </td>
           <td><span class="cell-date">{{ msg.age_days | age_label }} ago</span></td>
           <td><span class="cell-size">{{ msg.size_estimate | format_size }}</span></td>
           <td>

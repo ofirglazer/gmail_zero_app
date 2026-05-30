@@ -42,7 +42,12 @@
         <tr class="{{ 'row-very-large' if is_xl else 'row-large' if is_lg else '' }}">
           <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
           <td><span class="cell-sender" title="{{ msg.sender }}">{{ msg.sender_domain }}</span></td>
-          <td><span class="cell-subject">{{ msg.subject or '(no subject)' }}</span></td>
+          <td>
+            <span class="cell-subject">{{ msg.subject or '(no subject)' }}</span>
+            {% if msg.snippet %}
+            <span class="cell-snippet">{{ msg.snippet }}</span>
+            {% endif %}
+          </td>
           <td>
             {% if msg.is_inbox %}<span class="loc-pill loc-inbox">Inbox</span>
             {% elif msg.is_sent %}<span class="loc-pill loc-sent">Sent</span>

@@ -10,9 +10,9 @@
 * in all pages add in the table card header a checkbox to show/hide messages labels To-Remove or To-Archive. Default is hide.
 * in the dashboard add "Ready to archive" and "Ready to delete " count on the dashboard. It is a temporary counter card, makes the handoff explicit and gives a satisfying number to drive to zero outside the app.
 * in size zero page and in search page, allow user to modify labels of messages.
-* read snippets and display them in table in the different pages, in a 2nd line for each message, similar UI to gmail website.
 * allow double click or pressing Full Message when hovering over a message to see it in a reading pane to the right, similar to gmail reading pane. The entire message text without attachment will be downloaded and displayed there. Support keyboard shortcuts: Esc to close modal, Enter to open, arrow keys to move between messages.
 * dark/white mode support
+* in settings select font size small-medium-karge that effects UI, message subject and message snippets and full text
 
 
 ## for production 

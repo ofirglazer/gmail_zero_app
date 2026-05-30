@@ -324,11 +324,13 @@ button{cursor:pointer;font-family:inherit}
 
 .cell-sender{font-weight:500;color:var(--text-secondary);font-size:.8rem;max-width:155px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cell-subject{font-weight:500;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cell-snippet{display:block;font-size:.75rem;font-weight:400;color:var(--text-muted);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
 .cell-date{font-family:var(--mono);font-size:.75rem;color:var(--text-muted);white-space:nowrap}
 .cell-size{font-family:var(--mono);font-size:.78rem;color:var(--text-muted);text-align:right;white-space:nowrap}
 .cell-size-lg{color:var(--amber-500);font-weight:600}
 .cell-size-xl{color:var(--red-500);font-weight:600}
 .row-unread .cell-subject,.row-unread .cell-sender{font-weight:700;color:var(--text-primary)}
+.row-unread .cell-snippet{color:var(--text-muted);font-weight:400}
 .row-very-large{background:rgba(239,68,68,.03)}
 .row-large{background:rgba(245,158,11,.03)}
 .row-very-large:hover{background:rgba(239,68,68,.06)!important}
