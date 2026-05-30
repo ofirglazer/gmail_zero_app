@@ -28,12 +28,18 @@ pytest markers:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
 from config.settings import Environment, Settings
 from domain.exceptions import LabelOperationError, SafetyViolationError
 from domain.safety.guard import SafetyGuard
-from application.dto.label_operation import BulkLabelOperationRequest, LabelOperationRequest
+from application.dto.label_operation import (
+    BulkLabelOperationRequest,
+    LabelOperationRequest,
+    LabelToggleRequest,
+)
 from application.services.analytics_service import AnalyticsService
 from application.services.label_service import LabelService
 from application.services.search_service import SearchService
@@ -48,6 +54,9 @@ from infrastructure.persistence.repositories.message_repository import (
 )
 from infrastructure.persistence.repositories.snapshot_repository import SnapshotRepository
 from infrastructure.persistence.repositories.sync_state_repository import SyncStateRepository
+
+if TYPE_CHECKING:
+    from sqlalchemy import Engine
 
 pytestmark = pytest.mark.integration
 
@@ -71,7 +80,9 @@ def demo_settings() -> Settings:
 
 # ── Core fixtures ─────────────────────────────────────────────────────────────
 
-def _build_synced_engine(settings: Settings):
+def _build_synced_engine(
+    settings: Settings,
+) -> tuple[Engine, MockGmailClient]:
     """Helper: build an engine, initialise the schema, run a full sync."""
     engine = build_engine("sqlite:///:memory:")
     initialise_db(engine)
@@ -101,7 +112,9 @@ def _build_synced_engine(settings: Settings):
 
 
 @pytest.fixture(scope="module")
-def synced_engine(demo_settings: Settings):
+def synced_engine(
+    demo_settings: Settings,
+) -> tuple[Engine, MockGmailClient]:
     """
     Module-scoped: one full sync shared across all read-only tests.
     Do NOT use this fixture in tests that mutate message or label state.
@@ -111,7 +124,9 @@ def synced_engine(demo_settings: Settings):
 
 
 @pytest.fixture()
-def fresh_synced_db(demo_settings: Settings):
+def fresh_synced_db(
+    demo_settings: Settings,
+) -> tuple[Engine, MockGmailClient, Settings]:
     """
     Function-scoped: fresh full sync per test.
     Use for tests that add/remove labels or advance history.
@@ -125,7 +140,9 @@ def fresh_synced_db(demo_settings: Settings):
 class TestFullSync:
     """Full sync pipeline correctness tests."""
 
-    def test_full_sync_populates_inbox(self, synced_engine):
+    def test_full_sync_populates_inbox(
+        self, synced_engine: tuple[Engine, MockGmailClient]
+    ) -> None:
         """After a full sync, count_inbox() must equal the mock inbox count."""
         engine, client = synced_engine
         with get_session(engine) as session:
@@ -138,7 +155,9 @@ class TestFullSync:
             f"({client.inbox_count()})"
         )
 
-    def test_full_sync_total_message_count(self, synced_engine):
+    def test_full_sync_total_message_count(
+        self, synced_engine: tuple[Engine, MockGmailClient]
+    ) -> None:
         """Every message in the mock dataset should be upserted to the DB."""
         engine, client = synced_engine
         with get_session(engine) as session:
@@ -150,7 +169,9 @@ class TestFullSync:
             f"DB total ({total}) does not match mock dataset size ({client.message_count()})"
         )
 
-    def test_full_sync_writes_sync_state(self, synced_engine):
+    def test_full_sync_writes_sync_state(
+        self, synced_engine: tuple[Engine, MockGmailClient]
+    ) -> None:
         """A SyncState(FULL) record must exist after a full sync."""
         from domain.models.sync_state import SyncType
 
@@ -164,7 +185,9 @@ class TestFullSync:
         assert state.messages_synced > 0
         assert state.history_id  # non-empty string
 
-    def test_full_sync_writes_daily_snapshot(self, synced_engine):
+    def test_full_sync_writes_daily_snapshot(
+        self, synced_engine: tuple[Engine, MockGmailClient]
+    ) -> None:
         """A DailySnapshot must be written at the end of a full sync."""
         engine, _ = synced_engine
         with get_session(engine) as session:
@@ -173,7 +196,9 @@ class TestFullSync:
 
         assert count >= 1, "Expected at least one DailySnapshot after full sync"
 
-    def test_full_sync_writes_labels(self, synced_engine):
+    def test_full_sync_writes_labels(
+        self, synced_engine: tuple[Engine, MockGmailClient]
+    ) -> None:
         """The label registry should be populated with system + user labels."""
         engine, _ = synced_engine
         with get_session(engine) as session:
@@ -186,7 +211,9 @@ class TestFullSync:
             "User label ZeroApp/Needs-Action must be in registry"
         )
 
-    def test_full_sync_archive_unlabelled_count_positive(self, synced_engine):
+    def test_full_sync_archive_unlabelled_count_positive(
+        self, synced_engine: tuple[Engine, MockGmailClient]
+    ) -> None:
         """There should be archived messages with no custom label (archive hygiene targets)."""
         engine, _ = synced_engine
         with get_session(engine) as session:
@@ -195,7 +222,9 @@ class TestFullSync:
 
         assert count > 0, "Expected unlabelled archived messages in the mock dataset"
 
-    def test_full_sync_has_size_data(self, synced_engine):
+    def test_full_sync_has_size_data(
+        self, synced_engine: tuple[Engine, MockGmailClient]
+    ) -> None:
         """Total size bytes must be non-zero after syncing the mock dataset."""
         engine, _ = synced_engine
         with get_session(engine) as session:
@@ -211,8 +240,10 @@ class TestIncrementalSync:
     """Incremental sync pipeline correctness tests."""
 
     def test_incremental_sync_adds_new_messages(
-        self, fresh_synced_db: tuple, demo_settings: Settings
-    ):
+        self,
+        fresh_synced_db: tuple[Engine, MockGmailClient, Settings],
+        demo_settings: Settings,
+    ) -> None:
         """advance_history() then incremental sync should add the new messages."""
         engine, client, settings = fresh_synced_db
 
@@ -254,7 +285,7 @@ class TestIncrementalSync:
 
     def test_incremental_sync_without_prior_sync_falls_back_to_full(
         self, demo_settings: Settings
-    ):
+    ) -> None:
         """When no SyncState exists, incremental sync must fall back to full sync."""
         from domain.models.sync_state import SyncType
 
@@ -287,8 +318,8 @@ class TestIncrementalSync:
         assert state.messages_synced == client.message_count()
 
     def test_incremental_sync_no_changes_produces_zero_messages_synced(
-        self, fresh_synced_db: tuple
-    ):
+        self, fresh_synced_db: tuple[Engine, MockGmailClient, Settings]
+    ) -> None:
         """An incremental sync with no changes should report 0 messages synced."""
         engine, client, settings = fresh_synced_db
 
@@ -320,7 +351,9 @@ class TestIncrementalSync:
 class TestLabelService:
     """End-to-end label operation tests."""
 
-    def test_add_label_updates_db_and_mock(self, fresh_synced_db: tuple):
+    def test_add_label_updates_db_and_mock(
+        self, fresh_synced_db: tuple[Engine, MockGmailClient, Settings]
+    ) -> None:
         """
         apply_label_operation should:
             1. Call the mock client (mutate its state).
@@ -360,7 +393,171 @@ class TestLabelService:
         assert db_message is not None
         assert _LABEL_COMPLETE in db_message.label_ids
 
-    def test_remove_label_updates_db_and_mock(self, fresh_synced_db: tuple):
+    def test_toggle_label_adds_when_absent(
+        self, fresh_synced_db: tuple[Engine, MockGmailClient, Settings]
+    ) -> None:
+        """toggle_label_operation should add a missing label."""
+        engine, client, _ = fresh_synced_db
+
+        assert _LABEL_COMPLETE not in client.get_label_ids_for_message("inbox001")
+
+        guard = SafetyGuard()
+        request = LabelToggleRequest(
+            message_ids=("inbox001",),
+            label_id=_LABEL_COMPLETE,
+        )
+
+        with get_session(engine) as session:
+            label_svc = LabelService(
+                client=client,
+                guard=guard,
+                msg_repo=MessageRepository(session),
+                label_repo=LabelRepository(session),
+                session=session,
+            )
+            updated = label_svc.toggle_label_operation(request)
+
+        assert len(updated) == 1
+        assert _LABEL_COMPLETE in client.get_label_ids_for_message("inbox001")
+        assert _LABEL_COMPLETE in updated[0].label_ids
+
+    def test_toggle_label_removes_when_present(
+        self, fresh_synced_db: tuple[Engine, MockGmailClient, Settings]
+    ) -> None:
+        """toggle_label_operation should remove an existing label."""
+        engine, client, _ = fresh_synced_db
+
+        assert _LABEL_COMPLETE in client.get_label_ids_for_message("inbox002")
+
+        guard = SafetyGuard()
+        request = LabelToggleRequest(
+            message_ids=("inbox002",),
+            label_id=_LABEL_COMPLETE,
+        )
+
+        with get_session(engine) as session:
+            label_svc = LabelService(
+                client=client,
+                guard=guard,
+                msg_repo=MessageRepository(session),
+                label_repo=LabelRepository(session),
+                session=session,
+            )
+            updated = label_svc.toggle_label_operation(request)
+
+        assert len(updated) == 1
+        assert _LABEL_COMPLETE not in client.get_label_ids_for_message("inbox002")
+        assert _LABEL_COMPLETE not in updated[0].label_ids
+
+    def test_toggle_label_adds_to_all_selected_messages(
+        self, fresh_synced_db: tuple[Engine, MockGmailClient, Settings]
+    ) -> None:
+        """toggle_label_operation should add the label to every selected message that lacks it."""
+        engine, client, _ = fresh_synced_db
+
+        target_ids = ("inbox001", "inbox003", "inbox005")
+        for message_id in target_ids:
+            assert _LABEL_COMPLETE not in client.get_label_ids_for_message(message_id)
+
+        guard = SafetyGuard()
+        request = LabelToggleRequest(
+            message_ids=target_ids,
+            label_id=_LABEL_COMPLETE,
+        )
+
+        with get_session(engine) as session:
+            label_svc = LabelService(
+                client=client,
+                guard=guard,
+                msg_repo=MessageRepository(session),
+                label_repo=LabelRepository(session),
+                session=session,
+            )
+            updated = label_svc.toggle_label_operation(request)
+
+        assert len(updated) == len(target_ids)
+        for message_id in target_ids:
+            assert _LABEL_COMPLETE in client.get_label_ids_for_message(message_id)
+
+        updated_ids = {msg.id for msg in updated}
+        assert updated_ids == set(target_ids)
+
+    def test_toggle_label_removes_from_all_selected_messages(
+        self, fresh_synced_db: tuple[Engine, MockGmailClient, Settings]
+    ) -> None:
+        """toggle_label_operation should remove the label from every selected message that has it."""
+        engine, client, _ = fresh_synced_db
+
+        target_ids = ("inbox002", "inbox004")
+        for message_id in target_ids:
+            assert _LABEL_COMPLETE in client.get_label_ids_for_message(message_id)
+
+        guard = SafetyGuard()
+        request = LabelToggleRequest(
+            message_ids=target_ids,
+            label_id=_LABEL_COMPLETE,
+        )
+
+        with get_session(engine) as session:
+            label_svc = LabelService(
+                client=client,
+                guard=guard,
+                msg_repo=MessageRepository(session),
+                label_repo=LabelRepository(session),
+                session=session,
+            )
+            updated = label_svc.toggle_label_operation(request)
+
+        assert len(updated) == len(target_ids)
+        for message_id in target_ids:
+            assert _LABEL_COMPLETE not in client.get_label_ids_for_message(message_id)
+
+        updated_ids = {msg.id for msg in updated}
+        assert updated_ids == set(target_ids)
+
+    def test_toggle_label_adds_some_and_removes_some(
+        self, fresh_synced_db: tuple[Engine, MockGmailClient, Settings]
+    ) -> None:
+        """toggle_label_operation should resolve each message independently."""
+        engine, client, _ = fresh_synced_db
+
+        add_ids = ("inbox001", "inbox003", "inbox005")
+        remove_ids = ("inbox002",)
+        target_ids = add_ids + remove_ids
+
+        for message_id in add_ids:
+            assert _LABEL_COMPLETE not in client.get_label_ids_for_message(message_id)
+        for message_id in remove_ids:
+            assert _LABEL_COMPLETE in client.get_label_ids_for_message(message_id)
+
+        guard = SafetyGuard()
+        request = LabelToggleRequest(
+            message_ids=target_ids,
+            label_id=_LABEL_COMPLETE,
+        )
+
+        with get_session(engine) as session:
+            label_svc = LabelService(
+                client=client,
+                guard=guard,
+                msg_repo=MessageRepository(session),
+                label_repo=LabelRepository(session),
+                session=session,
+            )
+            updated = label_svc.toggle_label_operation(request)
+
+        assert len(updated) == len(target_ids)
+        for message_id in add_ids:
+            assert _LABEL_COMPLETE in client.get_label_ids_for_message(message_id)
+        for message_id in remove_ids:
+            assert _LABEL_COMPLETE not in client.get_label_ids_for_message(message_id)
+
+        updated_ids = {msg.id for msg in updated}
+        assert updated_ids == set(target_ids)
+
+    def test_remove_label_updates_db_and_mock(
+        self, fresh_synced_db: tuple[Engine, MockGmailClient, Settings]
+    ) -> None:
         """apply_label_operation should remove labels from both mock and DB."""
         engine, client, _ = fresh_synced_db
 
@@ -386,7 +583,9 @@ class TestLabelService:
         assert _LABEL_COMPLETE not in client.get_label_ids_for_message("inbox002")
         assert _LABEL_COMPLETE not in updated.label_ids
 
-    def test_label_operation_writes_audit_log(self, fresh_synced_db: tuple):
+    def test_label_operation_writes_audit_log(
+        self, fresh_synced_db: tuple[Engine, MockGmailClient, Settings]
+    ) -> None:
         """Every label operation must produce an audit log entry."""
         from sqlalchemy import select
         from infrastructure.persistence.models import LabelOperationLogORM
@@ -421,8 +620,8 @@ class TestLabelService:
         assert len(log_entries) >= 1, "Expected at least one audit log entry"
 
     def test_label_op_blocked_by_safety_guard_inbox_removal(
-        self, fresh_synced_db: tuple
-    ):
+        self, fresh_synced_db: tuple[Engine, MockGmailClient, Settings]
+    ) -> None:
         """
         Attempting to remove INBOX must raise SafetyViolationError.
         The error must propagate — NOT be caught by LabelService.
@@ -454,8 +653,8 @@ class TestLabelService:
         )
 
     def test_label_op_blocked_by_safety_guard_protected_add(
-        self, fresh_synced_db: tuple
-    ):
+        self, fresh_synced_db: tuple[Engine, MockGmailClient, Settings]
+    ) -> None:
         """Adding TRASH must raise SafetyViolationError."""
         engine, client, _ = fresh_synced_db
 
@@ -476,7 +675,9 @@ class TestLabelService:
             with pytest.raises(SafetyViolationError):
                 label_svc.apply_label_operation(request)
 
-    def test_label_op_fails_for_unknown_message(self, fresh_synced_db: tuple):
+    def test_label_op_fails_for_unknown_message(
+        self, fresh_synced_db: tuple[Engine, MockGmailClient, Settings]
+    ) -> None:
         """Attempting to label a message not in the DB should raise LabelOperationError."""
         engine, client, _ = fresh_synced_db
 
@@ -498,8 +699,8 @@ class TestLabelService:
                 label_svc.apply_label_operation(request)
 
     def test_bulk_label_operation_applies_to_all_messages(
-        self, fresh_synced_db: tuple
-    ):
+        self, fresh_synced_db: tuple[Engine, MockGmailClient, Settings]
+    ) -> None:
         """Bulk operation should update every message in the request."""
         engine, client, _ = fresh_synced_db
 
@@ -533,8 +734,10 @@ class TestAnalyticsService:
     """Analytics service correctness tests after a full sync."""
 
     def test_dashboard_summary_non_zero_counts(
-        self, synced_engine, demo_settings: Settings
-    ):
+        self,
+        synced_engine: tuple[Engine, MockGmailClient],
+        demo_settings: Settings,
+    ) -> None:
         """All major counts must be positive after syncing the mock dataset."""
         engine, _ = synced_engine
         with get_session(engine) as session:
@@ -553,8 +756,10 @@ class TestAnalyticsService:
         assert summary.has_ever_synced, "has_ever_synced must be True after a sync"
 
     def test_dashboard_summary_zero_goals_reflect_correctly(
-        self, synced_engine, demo_settings: Settings
-    ):
+        self,
+        synced_engine: tuple[Engine, MockGmailClient],
+        demo_settings: Settings,
+    ) -> None:
         """Verify that zero-goal properties are derived correctly from counts."""
         engine, _ = synced_engine
         with get_session(engine) as session:
@@ -573,8 +778,10 @@ class TestAnalyticsService:
         assert summary.sent_zero_reached == (summary.sent_unresolved_count == 0)
 
     def test_top_senders_by_count_returns_results(
-        self, synced_engine, demo_settings: Settings
-    ):
+        self,
+        synced_engine: tuple[Engine, MockGmailClient],
+        demo_settings: Settings,
+    ) -> None:
         """top_senders_by_count must return at least one sender."""
         engine, _ = synced_engine
         with get_session(engine) as session:
@@ -593,8 +800,10 @@ class TestAnalyticsService:
         assert counts == sorted(counts, reverse=True)
 
     def test_top_senders_by_size_returns_results(
-        self, synced_engine, demo_settings: Settings
-    ):
+        self,
+        synced_engine: tuple[Engine, MockGmailClient],
+        demo_settings: Settings,
+    ) -> None:
         """top_senders_by_size must return at least one sender."""
         engine, _ = synced_engine
         with get_session(engine) as session:
@@ -612,8 +821,10 @@ class TestAnalyticsService:
         assert sizes == sorted(sizes, reverse=True)
 
     def test_progress_snapshots_returns_at_least_one(
-        self, synced_engine, demo_settings: Settings
-    ):
+        self,
+        synced_engine: tuple[Engine, MockGmailClient],
+        demo_settings: Settings,
+    ) -> None:
         """After a full sync, at least one DailySnapshot must exist."""
         engine, _ = synced_engine
         with get_session(engine) as session:
@@ -634,7 +845,9 @@ class TestAnalyticsService:
 class TestSearchService:
     """SearchService correctness tests."""
 
-    def test_search_no_filters_returns_all(self, synced_engine):
+    def test_search_no_filters_returns_all(
+        self, synced_engine: tuple[Engine, MockGmailClient]
+    ) -> None:
         """An empty MessageFilter should return all messages (up to the default limit)."""
         engine, client = synced_engine
         with get_session(engine) as session:
@@ -646,7 +859,9 @@ class TestSearchService:
         # results are paginated by the default limit (200)
         assert len(results) <= 200
 
-    def test_search_by_inbox_flag(self, synced_engine):
+    def test_search_by_inbox_flag(
+        self, synced_engine: tuple[Engine, MockGmailClient]
+    ) -> None:
         """Filtering by is_inbox=True must return only inbox messages."""
         engine, client = synced_engine
         with get_session(engine) as session:
@@ -657,7 +872,9 @@ class TestSearchService:
         for msg in results:
             assert msg.is_inbox, f"Message {msg.id} is not in inbox"
 
-    def test_search_by_sender_domain(self, synced_engine):
+    def test_search_by_sender_domain(
+        self, synced_engine: tuple[Engine, MockGmailClient]
+    ) -> None:
         """Filtering by sender_domain must restrict results to that domain."""
         engine, _ = synced_engine
         with get_session(engine) as session:
@@ -671,7 +888,9 @@ class TestSearchService:
                 "does not contain 'github'"
             )
 
-    def test_search_total_count_ignores_pagination(self, synced_engine):
+    def test_search_total_count_ignores_pagination(
+        self, synced_engine: tuple[Engine, MockGmailClient]
+    ) -> None:
         """total_count must reflect all matching rows regardless of limit/offset."""
         engine, _ = synced_engine
         with get_session(engine) as session:
@@ -684,7 +903,9 @@ class TestSearchService:
             "total_count should be the same regardless of pagination offset"
         )
 
-    def test_search_returns_empty_for_impossible_filter(self, synced_engine):
+    def test_search_returns_empty_for_impossible_filter(
+        self, synced_engine: tuple[Engine, MockGmailClient]
+    ) -> None:
         """A filter matching no messages should return ([], 0)."""
         engine, _ = synced_engine
         with get_session(engine) as session:

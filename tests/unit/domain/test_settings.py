@@ -45,10 +45,10 @@ class TestEnvironmentEnum:
     """Environment is a StrEnum — members compare equal to their string values."""
 
     def test_demo_equals_string(self) -> None:
-        assert Environment.DEMO == "demo"
+        assert Environment.DEMO.value == "demo"
 
     def test_production_equals_string(self) -> None:
-        assert Environment.PRODUCTION == "production"
+        assert Environment.PRODUCTION.value == "production"
 
     def test_members_are_strings(self) -> None:
         assert isinstance(Environment.DEMO, str)

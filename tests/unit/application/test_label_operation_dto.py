@@ -5,6 +5,7 @@ Covers:
   - Construction validation (__post_init__ guards)
   - Property derivations (is_add_only, is_remove_only, total_label_count)
   - BulkLabelOperationRequest.to_individual_requests() expansion
+  - LabelToggleRequest validation
   - Immutability (frozen dataclasses)
   - __str__ representations
   - Edge cases: single-label sets, max-size sets
@@ -14,7 +15,11 @@ from __future__ import annotations
 
 import pytest
 
-from application.dto.label_operation import BulkLabelOperationRequest, LabelOperationRequest
+from application.dto.label_operation import (
+    BulkLabelOperationRequest,
+    LabelOperationRequest,
+    LabelToggleRequest,
+)
 
 # ── LabelOperationRequest ─────────────────────────────────────────────────────
 
@@ -376,3 +381,60 @@ class TestBulkLabelOperationRequestStr:
             add_label_ids=frozenset({"Label_a"}),
         )
         assert str(req)
+
+
+# ── LabelToggleRequest ────────────────────────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestLabelToggleRequestConstruction:
+    """Construction validation for toggle requests."""
+
+    def test_valid_toggle_request(self) -> None:
+        req = LabelToggleRequest(
+            message_ids=("msg001", "msg002"),
+            label_id="Label_a",
+        )
+        assert req.message_ids == ("msg001", "msg002")
+        assert req.label_id == "Label_a"
+
+    def test_empty_message_ids_raises(self) -> None:
+        with pytest.raises(ValueError, match="at least one message"):
+            LabelToggleRequest(
+                message_ids=(),
+                label_id="Label_a",
+            )
+
+    def test_empty_label_id_raises(self) -> None:
+        with pytest.raises(ValueError, match="label_id"):
+            LabelToggleRequest(
+                message_ids=("msg001",),
+                label_id="",
+            )
+
+    def test_request_is_frozen(self) -> None:
+        req = LabelToggleRequest(
+            message_ids=("msg001",),
+            label_id="Label_a",
+        )
+        with pytest.raises(AttributeError):
+            req.label_id = "mutated"  # type: ignore[misc]
+
+
+@pytest.mark.unit
+class TestLabelToggleRequestProperties:
+    """Derived property correctness for toggle requests."""
+
+    def test_message_count(self) -> None:
+        req = LabelToggleRequest(
+            message_ids=("msg001", "msg002", "msg003"),
+            label_id="Label_a",
+        )
+        assert req.message_count == 3
+
+    def test_total_label_count(self) -> None:
+        req = LabelToggleRequest(
+            message_ids=("msg001",),
+            label_id="Label_a",
+        )
+        assert req.total_label_count == 1

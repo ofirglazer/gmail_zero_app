@@ -7,6 +7,42 @@
     <h1 class="page-title">Settings</h1>
     <p class="page-desc">Environment configuration, sync history, and label registry.</p>
   </div>
+  <div class="page-actions">
+    <form class="sync-actionbar" method="post" action="{{ url_for('main.sync_now') }}">
+      <input type="hidden" name="next" value="{{ request.path }}">
+      <button type="submit" name="sync_mode" value="full" class="btn btn-secondary btn-sm">Full sync now</button>
+      <button type="submit" name="sync_mode" value="incremental" class="btn btn-secondary btn-sm">Incremental sync now</button>
+    </form>
+    <a class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer"
+       href="https://mail.google.com/mail/u/0/#search/label%3AZeroApp%2FTo-Remove+in%3Ainbox">
+      Open To-Remove in Gmail
+    </a>
+  </div>
+</div>
+
+<div class="guide-panel ani">
+  <div class="guide-panel-hdr">
+    <div>
+      <div class="guide-panel-title">Inbox cleanup instructions</div>
+      <div class="guide-panel-sub">Use the app to label each message, then finish the cleanup in Gmail.</div>
+    </div>
+  </div>
+  <div class="guide-steps">
+    <div class="guide-step">
+      <div class="guide-step-num">1</div>
+      <div>
+        <div class="guide-step-title">Label every message in the app</div>
+        <div class="guide-step-desc">Work through Inbox, Archive, and Sent until each message carries the right ZeroApp label.</div>
+      </div>
+    </div>
+    <div class="guide-step">
+      <div class="guide-step-num">2</div>
+      <div>
+        <div class="guide-step-title">Archive and Delete in Gmail</div>
+        <div class="guide-step-desc">Open Gmail's pre-filtered views, archive or delete the matching threads after they have been labeled here.</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="settings-grid">

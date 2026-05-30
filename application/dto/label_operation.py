@@ -147,3 +147,31 @@ class BulkLabelOperationRequest:
         if self.remove_label_ids:
             parts.append(f"remove={set(self.remove_label_ids)}")
         return f"BulkLabelOperationRequest(messages={self.message_count}, {', '.join(parts)})"
+
+
+@dataclass(frozen=True)
+class LabelToggleRequest:
+    """
+    User intent to toggle one label across selected messages.
+
+    The presentation layer does not decide add vs remove. LabelService resolves
+    that per message by checking whether the message already has label_id.
+    """
+
+    message_ids: tuple[str, ...]
+    label_id: str
+
+    def __post_init__(self) -> None:
+        if not self.message_ids:
+            raise ValueError("LabelToggleRequest requires at least one message_id.")
+
+        if not self.label_id:
+            raise ValueError("label_id must not be empty.")
+
+    @property
+    def message_count(self) -> int:
+        return len(self.message_ids)
+
+    @property
+    def total_label_count(self) -> int:
+        return 1

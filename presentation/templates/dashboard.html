@@ -9,6 +9,10 @@
     <p class="page-desc">Track your progress toward all four zero goals.</p>
   </div>
   <div class="page-actions">
+    <a class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer"
+       href="https://mail.google.com/mail/u/0/#search/label%3AZeroApp%2FTo-Remove+in%3Ainbox">
+      Open To-Remove in Gmail
+    </a>
     {% if last_sync %}
     <div class="sync-pill">
       <span class="sdot sdot-green"></span>
@@ -113,6 +117,11 @@
   </div>
 </div>
 {% endif %}
+<script>
+setInterval(() => {
+  if (document.visibilityState === 'visible') window.location.reload();
+}, 30000);
+</script>
 {% endblock %}
 
 {% block scripts %}

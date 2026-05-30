@@ -160,7 +160,8 @@ class LabelConfigService:
             )
 
         try:
-            raw: dict = tomllib.loads(path.read_text(encoding="utf-8"))
+            from typing import Any
+            raw: dict[str, Any] = tomllib.loads(path.read_text(encoding="utf-8"))
         except tomllib.TOMLDecodeError as exc:
             raise LabelConfigError(
                 path=str(path),

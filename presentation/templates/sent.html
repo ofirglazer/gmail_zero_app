@@ -7,12 +7,29 @@
     <h1 class="page-title">Sent Zero <span class="page-count">{{ total_count }}</span></h1>
     <p class="page-desc">Sent messages without a workflow label — oldest first.</p>
   </div>
+  <div class="page-actions">
+    <a class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer"
+       href="https://mail.google.com/mail/u/0/#search/label%3AZeroApp%2FTo-Remove+in%3Ainbox">
+      Open To-Remove in Gmail
+    </a>
+  </div>
 </div>
 
 {% if messages %}
+<form method="post" action="{{ url_for('main.apply_label') }}">
+<input type="hidden" name="next" value="{{ request.full_path }}">
 <div class="table-card ani">
   <div class="table-card-hdr">
     <span class="table-card-title">Sent messages <span class="chip chip-amber">{{ total_count }} unresolved</span></span>
+    <div class="label-actionbar">
+      <select class="form-select form-select-sm" name="label_id" aria-label="Label to apply">
+        <option value="">Choose label</option>
+        {% for lbl in user_labels %}
+        <option value="{{ lbl.id }}">{{ lbl.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+    </div>
   </div>
   <div class="tbl-wrap">
     <table class="dtable">
@@ -46,6 +63,7 @@
     </table>
   </div>
 </div>
+</form>
 {% else %}
 <div class="empty empty--success ani">
   <div class="empty-icon">✓</div>

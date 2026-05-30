@@ -69,15 +69,17 @@ def build_engine(db_url: str, *, echo: bool = False) -> Engine:
         connect_args={"check_same_thread": False},
     )
 
+    import sqlite3
+
     @event.listens_for(engine, "connect")
-    def _configure_sqlite(dbapi_connection: object, _connection_record: object) -> None:
+    def _configure_sqlite(dbapi_connection: sqlite3.Connection, _connection_record: object) -> None:
         """
         Apply SQLite PRAGMAs on every new connection.
 
         These must be set per-connection, not per-engine, because SQLite
         PRAGMAs are connection-scoped.
         """
-        cursor = dbapi_connection.cursor()  # type: ignore[union-attr]
+        cursor = dbapi_connection.cursor()
 
         # WAL mode: readers don't block writers, writers don't block readers.
         # Significantly improves dashboard query performance during sync.

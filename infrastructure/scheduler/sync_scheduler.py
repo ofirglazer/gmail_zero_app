@@ -21,9 +21,10 @@ Design:
     APScheduler is listed as an optional dependency.  ImportError is deferred
     to ``start()`` so the app can boot without it when scheduling is disabled.
 
-    SyncServiceFactory is a callable that constructs a fresh SyncService
-    (with its own session) for each scheduler invocation.  This avoids sharing
-    a single SQLAlchemy session across threads, which is not safe.
+    SyncServiceFactory is a context-managed callable that yields a fresh
+    SyncService (with its own session) for each scheduler invocation and
+    closes it after the job finishes. This avoids sharing a single SQLAlchemy
+    session across threads, which is not safe.
 
     The scheduler runs in a ``BackgroundScheduler`` (daemon thread) so it
     does not block the Flask dev server from shutting down.
@@ -32,6 +33,7 @@ Design:
 from __future__ import annotations
 
 import logging
+from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING, Callable
 
 from domain.exceptions import IncrementalSyncError
@@ -42,9 +44,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Callable that produces a fully-wired SyncService with a fresh session.
-# The factory is responsible for creating the session and all repos.
-SyncServiceFactory = Callable[[], "SyncService"]
+# Callable that yields a fully-wired SyncService with a fresh session.
+# The factory is responsible for creating and closing the session and repos.
+SyncServiceFactory = Callable[[], AbstractContextManager["SyncService"]]
 
 
 class SyncScheduler:
@@ -56,7 +58,7 @@ class SyncScheduler:
     it automatically falls back to a full sync.
 
     Args:
-        factory:  Callable that returns a fresh SyncService.  Called at each
+        factory:  Callable that yields a fresh SyncService.  Called at each
                   scheduled invocation (not at scheduler construction time).
         settings: Application settings for schedule configuration.
         incremental_interval_minutes: How often to run an incremental sync
@@ -90,6 +92,12 @@ class SyncScheduler:
             ImportError: If ``apscheduler`` is not installed.
             RuntimeError: If the scheduler is already running.
         """
+        logger.info(
+            "SyncScheduler started: full sync at %02d:00 UTC, "
+            "incremental every %d minutes.",
+            self._full_sync_hour,
+            self._incremental_interval_minutes,
+        )
         try:
             from apscheduler.schedulers.background import BackgroundScheduler
             from apscheduler.triggers.cron import CronTrigger
@@ -160,8 +168,8 @@ class SyncScheduler:
         """
         logger.info("Scheduled full sync starting.")
         try:
-            service = self._factory()
-            state = service.run_full_sync()
+            with self._factory() as service:
+                state = service.run_full_sync()
             logger.info(
                 "Scheduled full sync complete: %d messages synced, historyId=%s.",
                 state.messages_synced,
@@ -179,9 +187,9 @@ class SyncScheduler:
         """
         logger.info("Scheduled incremental sync starting.")
         try:
-            service = self._factory()
             try:
-                state = service.run_incremental_sync()
+                with self._factory() as service:
+                    state = service.run_incremental_sync()
                 logger.info(
                     "Incremental sync complete: %d messages synced, historyId=%s.",
                     state.messages_synced,
@@ -193,8 +201,8 @@ class SyncScheduler:
                     exc.history_id,
                 )
                 # Re-create the service to get a fresh session after the failed transaction
-                service = self._factory()
-                state = service.run_full_sync()
+                with self._factory() as service:
+                    state = service.run_full_sync()
                 logger.info(
                     "Fallback full sync complete: %d messages synced.",
                     state.messages_synced,
