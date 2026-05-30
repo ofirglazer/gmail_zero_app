@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from application.dto.analytics import DashboardSummary
+from infrastructure.persistence.repositories.message_repository import MessageFilter
 
 if TYPE_CHECKING:
     from domain.models.daily_snapshot import DailySnapshot
@@ -71,6 +72,8 @@ class AnalyticsService:
             DashboardSummary with all current counts and derived properties.
         """
         last_state = self._sync_repo.latest()
+        ready_to_archive_label_id = self._label_id_for_name("ZeroApp/To-Archive")
+        ready_to_delete_label_id = self._label_id_for_name("ZeroApp/To-Remove")
 
         return DashboardSummary(
             inbox_count=self._msg_repo.count_inbox(),
@@ -79,6 +82,28 @@ class AnalyticsService:
             sent_unresolved_count=self._msg_repo.count_sent_unresolved(),
             total_size_bytes=self._msg_repo.total_size_bytes(),
             custom_label_coverage_pct=self._msg_repo.custom_label_coverage_pct(),
+            ready_to_archive_count=(
+                self._msg_repo.count_search(
+                    MessageFilter(
+                        label_id=ready_to_archive_label_id,
+                        is_inbox=True,
+                        limit=1,
+                    )
+                )
+                if ready_to_archive_label_id is not None
+                else 0
+            ),
+            ready_to_delete_count=(
+                self._msg_repo.count_search(
+                    MessageFilter(
+                        label_id=ready_to_delete_label_id,
+                        is_inbox=True,
+                        limit=1,
+                    )
+                )
+                if ready_to_delete_label_id is not None
+                else 0
+            ),
             last_synced_at=last_state.last_synced_at if last_state is not None else None,
             old_inbox_thread_count=self._sync_repo.count_old_inbox_threads(
                 threshold_days=self._settings.old_thread_threshold_days
@@ -142,3 +167,8 @@ class AnalyticsService:
         return self._sync_repo.list_old_inbox_threads(
             threshold_days=self._settings.old_thread_threshold_days
         )
+
+    def _label_id_for_name(self, name: str) -> str | None:
+        """Return the local label ID for an exact display name, if present."""
+        label = self._label_repo.get_by_name(name)
+        return label.id if label is not None else None

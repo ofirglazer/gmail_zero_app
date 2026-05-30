@@ -26,6 +26,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from domain.exceptions import LabelOperationError
+from application.dto.label_operation import LabelOperationRequest, LabelToggleRequest
+from domain.exceptions import LabelOperationError
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -67,7 +69,7 @@ class LabelService:
         self._label_repo = label_repo
         self._session = session
 
-    # ── Public operation entry points ─────────────────────────────────────────
+    # ## Public operation entry points ##
 
     def apply_label_operation(self, request: LabelOperationRequest) -> Message:
         """
@@ -104,7 +106,7 @@ class LabelService:
         # ⚠️  DO NOT catch SafetyViolationError — it must reach the route layer.
         self._guard.validate_label_operation(request)
 
-        # ── Step 2: Verify message exists locally ─────────────────────────────
+        # ## Step 2: Verify message exists locally ##
         existing_message = self._msg_repo.get_by_id(request.message_id)
         if existing_message is None:
             raise LabelOperationError(
@@ -119,7 +121,7 @@ class LabelService:
                 ),
             )
 
-        # ── Step 3: Gmail API call ────────────────────────────────────────────
+        # ## Step 3: Gmail API call ##
         api_response = self._client.modify_message_labels(
             request.message_id,
             add_label_ids=list(request.add_label_ids) if request.add_label_ids else None,
@@ -170,7 +172,7 @@ class LabelService:
                 )
             raise
 
-        # ── Step 7: Return updated domain entity ──────────────────────────────
+        # ## Step 7: Return updated domain entity ##
         updated = self._msg_repo.get_by_id(request.message_id)
         # get_by_id should always find the row we just upserted
         assert updated is not None, f"Message {request.message_id!r} vanished after update"
@@ -230,7 +232,45 @@ class LabelService:
 
         return results
 
-    # ── Private helpers ───────────────────────────────────────────────────────
+    def toggle_label_operation(self, request: LabelToggleRequest) -> list[Message]:
+        """
+        Toggle one label across selected messages.
+
+        If a message already has request.label_id, remove it. Otherwise add it.
+        The presentation layer only supplies message_ids and label_id.
+        """
+        self._guard.validate_label_toggle_operation(request)
+
+        results: list[Message] = []
+        for message_id in request.message_ids:
+            existing = self._msg_repo.get_by_id(message_id)
+            if existing is None:
+                raise LabelOperationError(
+                    operation="toggle",
+                    message_id=message_id,
+                    label_id=request.label_id,
+                    reason=(
+                        f"Message {message_id!r} not found in the local database. "
+                        "Run a sync before applying label operations."
+                    ),
+                )
+
+            if request.label_id in existing.label_ids:
+                operation = LabelOperationRequest(
+                    message_id=message_id,
+                    remove_label_ids=frozenset({request.label_id}),
+                )
+            else:
+                operation = LabelOperationRequest(
+                    message_id=message_id,
+                    add_label_ids=frozenset({request.label_id}),
+                )
+
+            results.append(self.apply_label_operation(operation))
+
+        return results
+
+    # ## Private helpers ##
 
     def _resolve_label_name(self, label_id: str) -> str:
         """

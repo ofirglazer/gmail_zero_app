@@ -1,8 +1,9 @@
 """
 Main blueprint — HTML page routes for gmail_zero_app.
 
-All routes are read-only.  No label operations, no commits.  State mutation
-is Step 7.
+Most page routes are read-only.  The label action and manual sync action
+mutate state, but they still route through the application services rather
+than touching repositories directly.
 
 Route → service call → template render.  No repository access from routes
 directly — everything goes through services or g.{repo} only where no
@@ -16,31 +17,59 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from typing import TYPE_CHECKING
 
-from flask import Blueprint, g, redirect, render_template, request, url_for
+from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 
+from application.dto.label_operation import LabelToggleRequest
 from infrastructure.persistence.repositories.message_repository import MessageFilter
+
+if TYPE_CHECKING:
+    from werkzeug.wrappers import Response
+
+    from domain.models import Message
 
 main_bp = Blueprint("main", __name__)
 
 # Default rows per page for paginated views
 _DEFAULT_PER_PAGE = 50
 
+_WORKFLOW_LABEL_SUFFIXES = {"To-Archive", "To-Remove"}
 
-# ── Root redirect ─────────────────────────────────────────────────────────────
+
+def _parse_sort_params(
+    *,
+    default_sort_by: str,
+    default_sort_dir: str,
+    allowed_sort_by: set[str],
+) -> tuple[str, str]:
+    sort_by = request.args.get("sort", default_sort_by).strip()
+    sort_dir = request.args.get("dir", default_sort_dir).strip().lower()
+    if sort_by not in allowed_sort_by:
+        sort_by = default_sort_by
+    if sort_dir not in {"asc", "desc"}:
+        sort_dir = default_sort_dir
+    return sort_by, sort_dir
+
+
+def _show_workflow_labels() -> bool:
+    return request.args.get("show_workflow_labels", "").strip() in {"1", "true", "yes"}
+
+
+# ## Root redirect ##
 
 
 @main_bp.route("/")
-def index():
+def index() -> Response:
     """Redirect root to the dashboard."""
     return redirect(url_for("main.dashboard"))
 
 
-# ── Dashboard ─────────────────────────────────────────────────────────────────
+# ## Dashboard ##
 
 
 @main_bp.route("/dashboard")
-def dashboard():
+def dashboard() -> str:
     """
     Dashboard: four goal-status cards and 30-day progress graphs.
 
@@ -61,23 +90,92 @@ def dashboard():
     )
 
 
-# ── Inbox Zero ────────────────────────────────────────────────────────────────
+@main_bp.route("/messages/label", methods=["POST"])
+def apply_label() -> Response:
+    """Apply one user label to the selected message IDs."""
+    message_ids = tuple(mid for mid in request.form.getlist("message_ids") if mid)
+    label_id = request.form.get("label_id", "").strip()
+    next_url = request.form.get("next", "").strip() or url_for("main.dashboard")
+
+    if not message_ids:
+        flash("Select at least one message to label.", "error")
+        return redirect(next_url)
+    if not label_id:
+        flash("Choose a label to apply.", "error")
+        return redirect(next_url)
+
+    request_dto = LabelToggleRequest(
+        message_ids=message_ids,
+        label_id=label_id,
+    )
+    updated = g.label_svc.toggle_label_operation(request_dto)
+    flash(f"Applied label to {len(updated)} message(s).", "success")
+    return redirect(next_url)
+
+
+@main_bp.route("/sync", methods=["POST"])
+def sync_now() -> Response:
+    """
+    Trigger a manual sync from the UI.
+
+    The caller chooses between a full sync and an incremental sync; the
+    service executes the selected strategy and may fall back internally.
+    """
+    sync_mode = request.form.get("sync_mode", "").strip().lower()
+    next_url = request.form.get("next", "").strip() or url_for("main.settings_page")
+
+    if sync_mode not in {"full", "incremental"}:
+        flash("Choose a sync mode.", "error")
+        return redirect(next_url)
+
+    try:
+        if sync_mode == "full":
+            state = g.sync_svc.run_full_sync()
+        else:
+            state = g.sync_svc.run_incremental_sync()
+    except Exception as exc:
+        flash(f"Sync failed: {exc}", "error")
+        return redirect(next_url)
+
+    flash(
+        f"{state.sync_type.value.title()} sync complete: {state.messages_synced} messages synced.",
+        "success",
+    )
+    return redirect(next_url)
+
+
+# ## Inbox Zero ##
 
 
 @main_bp.route("/inbox")
-def inbox():
+def inbox() -> str:
     """
     Inbox Zero workflow: oldest messages first, paginated.
 
     Query params:
         page     int ≥ 1   (default 1)
-        per_page int 1–200 (default 50)
+        per_page int 1-200 (default 50)
     """
     page = max(1, request.args.get("page", 1, type=int))
     per_page = min(200, max(1, request.args.get("per_page", _DEFAULT_PER_PAGE, type=int)))
     offset = (page - 1) * per_page
+    sort_by, sort_dir = _parse_sort_params(
+        default_sort_by="internal_date",
+        default_sort_dir="desc",
+        allowed_sort_by={"internal_date", "sender_domain", "sender", "recipient", "subject", "size_estimate"},
+    )
+    sort_by, sort_dir = _parse_sort_params(
+        default_sort_by="internal_date",
+        default_sort_dir="asc",
+        allowed_sort_by={"internal_date", "sender_domain", "subject", "size_estimate"},
+    )
 
-    messages = g.msg_repo.list_inbox(oldest_first=True, limit=per_page, offset=offset)
+    messages = g.msg_repo.list_inbox(
+        limit=per_page,
+        offset=offset,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     total_count = g.msg_repo.count_inbox()
     total_pages = max(1, math.ceil(total_count / per_page))
 
@@ -88,14 +186,18 @@ def inbox():
         per_page=per_page,
         total_count=total_count,
         total_pages=total_pages,
+        user_labels=g.label_repo.list_user_labels(),
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        show_workflow_labels=_show_workflow_labels(),
     )
 
 
-# ── Archive Hygiene ───────────────────────────────────────────────────────────
+# ## Archive Hygiene ##
 
 
 @main_bp.route("/archive")
-def archive():
+def archive() -> str:
     """
     Archive Hygiene workflow: unlabelled archived messages grouped by sender domain.
 
@@ -108,28 +210,55 @@ def archive():
         grouped_by_domain dict[str, list[Message]] — domain → messages mapping
                           for the domain-based bulk-action UX in Step 7.
     """
-    messages = g.msg_repo.list_archive_unlabelled(limit=200)
+    sort_by, sort_dir = _parse_sort_params(
+        default_sort_by="sender_domain",
+        default_sort_dir="asc",
+        allowed_sort_by={"sender_domain", "sender", "subject", "internal_date", "size_estimate"},
+    )
+    messages = g.msg_repo.list_archive_unlabelled(
+        limit=200,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     total_count = g.msg_repo.count_archive_unlabelled()
+    to_archive_label = g.label_repo.get_by_name("ZeroApp/To-Archive")
+    archive_to_archive_count = (
+        g.msg_repo.count_search(
+            MessageFilter(
+                label_id=to_archive_label.id,
+                is_archived=True,
+                limit=1,
+            )
+        )
+        if to_archive_label is not None
+        else 0
+    )
 
     # Group by sender_domain; preserve order (domains appear in the order
     # list_archive_unlabelled returns them — already sorted by domain ASC)
-    grouped_by_domain: dict[str, list] = defaultdict(list)
+    grouped_by_domain: dict[str, list[Message]] = defaultdict(list)
     for msg in messages:
         grouped_by_domain[msg.sender_domain].append(msg)
+    grouped_by_domain = dict(sorted(grouped_by_domain.items(), key=lambda item: item[0]))
 
     return render_template(
         "archive.html",
         messages=messages,
         total_count=total_count,
         grouped_by_domain=dict(grouped_by_domain),
+        user_labels=g.label_repo.list_user_labels(),
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        show_workflow_labels=_show_workflow_labels(),
+        archive_to_archive_count=archive_to_archive_count,
     )
 
 
-# ── Sent Review ───────────────────────────────────────────────────────────────
+# ## Sent Review ##
 
 
 @main_bp.route("/sent")
-def sent():
+def sent() -> str:
     """
     Sent Review workflow: sent messages without a workflow label, oldest first.
 
@@ -137,21 +266,34 @@ def sent():
         messages     list[Message] — up to 200 sent messages.
         total_count  int — count of unresolved sent messages.
     """
-    messages = g.msg_repo.list_sent(oldest_first=True, limit=200)
+    sort_by, sort_dir = _parse_sort_params(
+        default_sort_by="internal_date",
+        default_sort_dir="asc",
+        allowed_sort_by={"internal_date", "recipient", "subject", "size_estimate"},
+    )
+    messages = g.msg_repo.list_sent(
+        limit=200,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     total_count = g.msg_repo.count_sent_unresolved()
 
     return render_template(
         "sent.html",
         messages=messages,
         total_count=total_count,
+        user_labels=g.label_repo.list_user_labels(),
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        show_workflow_labels=_show_workflow_labels(),
     )
 
 
-# ── Size Reduction ────────────────────────────────────────────────────────────
+# ## Size Reduction ##
 
 
 @main_bp.route("/size")
-def size():
+def size() -> str:
     """
     Size Reduction workflow: the 100 largest messages across all locations.
 
@@ -160,7 +302,12 @@ def size():
         total_size_bytes int — total size of all messages in the mailbox.
         total_size_gb    float — total_size_bytes expressed in GB.
     """
-    messages = g.msg_repo.list_largest(limit=100)
+    sort_by, sort_dir = _parse_sort_params(
+        default_sort_by="size_estimate",
+        default_sort_dir="desc",
+        allowed_sort_by={"size_estimate", "sender_domain", "sender", "recipient", "subject", "internal_date"},
+    )
+    messages = g.msg_repo.list_largest(limit=100, sort_by=sort_by, sort_dir=sort_dir)
     total_size_bytes = g.msg_repo.total_size_bytes()
     total_size_gb = round(total_size_bytes / (1024 ** 3), 3)
 
@@ -169,14 +316,18 @@ def size():
         messages=messages,
         total_size_bytes=total_size_bytes,
         total_size_gb=total_size_gb,
+        user_labels=g.label_repo.list_user_labels(),
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        show_workflow_labels=_show_workflow_labels(),
     )
 
 
-# ── Search ────────────────────────────────────────────────────────────────────
+# ## Search ##
 
 
 @main_bp.route("/search")
-def search():
+def search() -> str:
     """
     Search / filter view.
 
@@ -271,14 +422,15 @@ def search():
         page=page,
         per_page=per_page,
         user_labels=user_labels,
+        show_workflow_labels=_show_workflow_labels(),
     )
 
 
-# ── Settings ──────────────────────────────────────────────────────────────────
+# ## Settings ##
 
 
 @main_bp.route("/settings")
-def settings_page():
+def settings_page() -> str:
     """
     Settings view: sync history, label registry, environment summary.
 

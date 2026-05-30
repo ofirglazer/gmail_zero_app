@@ -8,6 +8,7 @@ the relevant sub-package.
 Marker registration is in pyproject.toml [tool.pytest.ini_options].
 """
 
+from pathlib import Path
 import pytest
 
 from config.settings import Environment, Settings
@@ -26,7 +27,7 @@ def demo_settings() -> Settings:
     return Settings(
         env=Environment.DEMO,
         secret_key="test-secret-key-32-chars-minimum!",
-        db_path=":memory:",  # type: ignore[arg-type]
+        db_path=Path(":memory:"),
         host="127.0.0.1",
         port=5000,
         debug=True,
@@ -36,7 +37,7 @@ def demo_settings() -> Settings:
 
 
 @pytest.fixture
-def production_settings(tmp_path: pytest.fixture) -> Settings:  # type: ignore[valid-type]
+def production_settings(tmp_path: Path) -> Settings:
     """
     Settings instance configured for production mode, with paths pointing
     to a temporary directory so tests remain isolated.

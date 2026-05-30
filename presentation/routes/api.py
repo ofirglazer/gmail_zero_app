@@ -9,13 +9,14 @@ consumption (Chart.js graphs, health checks).  No HTML rendering.
 
 from __future__ import annotations
 
-from flask import Blueprint, g, jsonify
+from flask import Blueprint, g, jsonify, Response
+
 
 api_bp = Blueprint("api", __name__, url_prefix="/api/v1")
 
 
 @api_bp.route("/progress")
-def progress():
+def progress() -> Response:
     """
     Return snapshot data for Chart.js progress graphs.
 
@@ -57,7 +58,7 @@ def progress():
 
 
 @api_bp.route("/health")
-def health():
+def health() -> Response:
     """
     Health check endpoint.
 

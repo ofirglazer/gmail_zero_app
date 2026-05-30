@@ -227,7 +227,7 @@ def _build_initial_dataset() -> dict[str, dict[str, Any]]:
 
         _make_msg("inbox004", "thread004", "h1004", 540,
                   "alerts@github.com", "Security alert: new sign-in from Chrome on Windows",
-                  ["INBOX", "UNREAD", "CATEGORY_UPDATES"], size_bytes=9_800,
+                  ["INBOX", "UNREAD", "CATEGORY_UPDATES", _LABEL_COMPLETE], size_bytes=9_800,
                   snippet="We noticed a new sign-in to your account from Chrome on Windows"),
 
         _make_msg("inbox005", "thread005", "h1005", 480,

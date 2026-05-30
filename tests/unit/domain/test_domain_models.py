@@ -397,8 +397,8 @@ class TestLabel:
         assert plain_user_label.label_list_visibility is None
 
     def test_label_type_str_enum(self) -> None:
-        assert LabelType.SYSTEM == "system"
-        assert LabelType.USER == "user"
+        assert LabelType.SYSTEM.value == "system"
+        assert LabelType.USER.value == "user"
 
     def test_str_representation(self, system_label: Label) -> None:
         s = str(system_label)
@@ -563,8 +563,8 @@ class TestSyncState:
             full_sync_state.messages_synced = 0  # type: ignore[misc]
 
     def test_sync_type_str_enum(self) -> None:
-        assert SyncType.FULL == "full"
-        assert SyncType.INCREMENTAL == "incremental"
+        assert SyncType.FULL.value == "full"
+        assert SyncType.INCREMENTAL.value == "incremental"
 
     def test_str_representation(self, full_sync_state: SyncState) -> None:
         s = str(full_sync_state)

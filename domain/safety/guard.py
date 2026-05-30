@@ -39,7 +39,11 @@ from domain.safety.constants import (
 )
 
 if TYPE_CHECKING:
-    from application.dto.label_operation import BulkLabelOperationRequest, LabelOperationRequest
+    from application.dto.label_operation import (
+        BulkLabelOperationRequest,
+        LabelOperationRequest,
+        LabelToggleRequest,
+    )
 
 
 class SafetyGuard:
@@ -76,6 +80,20 @@ class SafetyGuard:
         self._check_no_archive_via_inbox_removal(request.remove_label_ids)
         self._check_no_protected_label_removal(request.remove_label_ids)
         self._check_no_protected_label_addition(request.add_label_ids)
+        self._check_labels_per_operation_limit(request.total_label_count)
+
+    def validate_label_toggle_operation(self, request: LabelToggleRequest) -> None:
+        """
+        Validate a label toggle request before it is resolved into add/remove operations.
+
+        The selected label may become either an add or a remove per message, so both
+        add-side and remove-side safety rules must be checked.
+        """
+        label_ids = frozenset({request.label_id})
+
+        self._check_bulk_message_limit(request.message_count)
+        self._check_no_protected_label_removal(label_ids)
+        self._check_no_protected_label_addition(label_ids)
         self._check_labels_per_operation_limit(request.total_label_count)
 
     def validate_bulk_label_operation(self, request: BulkLabelOperationRequest) -> None:

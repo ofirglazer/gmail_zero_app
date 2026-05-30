@@ -9,6 +9,10 @@
     <p class="page-desc">Track your progress toward all four zero goals.</p>
   </div>
   <div class="page-actions">
+    <a class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer"
+       href="https://mail.google.com/mail/u/0/#search/label%3AZeroApp%2FTo-Remove+in%3Ainbox">
+      Open To-Remove in Gmail
+    </a>
     {% if last_sync %}
     <div class="sync-pill">
       <span class="sdot sdot-green"></span>
@@ -85,9 +89,28 @@
       <div class="chart-card-sub">Messages across all four workflows over time</div>
     </div>
     <div class="chart-legend">
-      <div class="legend-item"><span class="legend-dot" style="background:#21cad2"></span>Inbox</div>
-      <div class="legend-item"><span class="legend-dot" style="background:#8b5cf6"></span>Archive unlabelled</div>
-      <div class="legend-item"><span class="legend-dot" style="background:#f59e0b"></span>Sent unresolved</div>
+      <label class="legend-item">
+        <input type="checkbox" data-dataset="0" checked>
+        <span class="legend-dot" style="background:#21cad2"></span>
+        Inbox
+      </label>
+
+      <label class="legend-item">
+        <input type="checkbox" data-dataset="1" checked>
+        <span class="legend-dot" style="background:#8b5cf6"></span>
+        Archive unlabelled
+      </label>
+
+      <label class="legend-item">
+        <input type="checkbox" data-dataset="2" checked>
+        <span class="legend-dot" style="background:#f59e0b"></span>
+        Sent unresolved
+      </label>
+
+      <label class="legend-item" style="cursor:pointer;">
+        <input type="checkbox" id="yAxisZero" checked>
+        Start Y-axis at 0
+      </label>
     </div>
   </div>
   {% if snapshots %}
@@ -113,6 +136,11 @@
   </div>
 </div>
 {% endif %}
+<script>
+setInterval(() => {
+  if (document.visibilityState === 'visible') window.location.reload();
+}, 30000);
+</script>
 {% endblock %}
 
 {% block scripts %}
@@ -125,7 +153,8 @@ fetch('/api/v1/progress').then(r=>r.json()).then(data=>{
   const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(15,23,42,.06)';
   const labelColor = isDark ? 'rgba(255,255,255,.4)' : '#8097b4';
   const ctx = document.getElementById('progressChart').getContext('2d');
-  new Chart(ctx, {
+
+  const chart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: data.snapshots.map(s=>s.date),
@@ -157,6 +186,27 @@ fetch('/api/v1/progress').then(r=>r.json()).then(data=>{
       }
     }
   });
+
+  document.getElementById('yAxisZero').addEventListener('change', function () {
+  chart.options.scales.y.beginAtZero = this.checked;
+
+  // force scale recalculation
+  delete chart.options.scales.y.min;
+  delete chart.options.scales.y.max;
+
+  chart.update();
+});
+
+
+  // Toggle datasets
+  document.querySelectorAll('.chart-legend input[type="checkbox"]').forEach(cb=>{
+    cb.addEventListener('change', e=>{
+      const datasetIndex = parseInt(e.target.dataset.dataset);
+      chart.data.datasets[datasetIndex].hidden = !e.target.checked;
+      chart.update(); // Auto-rescales Y-axis for visible datasets
+    });
+  });
+
 }).catch(console.error);
 </script>
 {% endif %}

@@ -46,6 +46,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
     from config.settings import Settings
+    from domain.models.message import Message
     from infrastructure.gmail.client import AbstractGmailClient
     from infrastructure.gmail.mapper import GmailMapper
     from infrastructure.persistence.repositories.label_repository import LabelRepository
@@ -119,7 +120,8 @@ class SyncService:
                 max_results=500,
                 page_token=page_token,
             )
-            message_stubs: list[dict] = list_response.get("messages", [])
+            from typing import Any
+            message_stubs: list[dict[str, Any]] = list_response.get("messages", [])
 
             # Process the page in sub-batches of sync_batch_size
             for batch_start in range(0, len(message_stubs), self._settings.sync_batch_size):
@@ -301,7 +303,7 @@ class SyncService:
         self._snap_repo.upsert(snapshot)
         self._session.commit()
 
-    def _build_thread_stubs(self, messages: list) -> list[Thread]:
+    def _build_thread_stubs(self, messages: list[Message]) -> list[Thread]:
         """
         Derive minimal Thread stubs from a batch of mapped Message entities.
 
@@ -323,21 +325,21 @@ class SyncService:
         now = datetime.now(tz=UTC)
         # Group by thread_id; pick the message with the latest internal_date
         # as the representative for subject/snippet
-        best: dict[str, object] = {}
+        best: dict[str, Message] = {}
         for msg in messages:
             existing = best.get(msg.thread_id)
-            if existing is None or msg.internal_date > existing.internal_date:  # type: ignore[union-attr]
+            if existing is None or msg.internal_date > existing.internal_date:
                 best[msg.thread_id] = msg
 
         return [
             Thread(
-                id=msg.thread_id,  # type: ignore[union-attr]
-                subject=msg.subject,  # type: ignore[union-attr]
+                id=msg.thread_id,
+                subject=msg.subject,
                 message_count=1,      # stub; not authoritative
-                snippet=msg.snippet,  # type: ignore[union-attr]
-                last_message_at=msg.internal_date,  # type: ignore[union-attr]
-                is_inbox=msg.is_inbox,  # type: ignore[union-attr]
-                has_custom_label=msg.has_custom_label,  # type: ignore[union-attr]
+                snippet=msg.snippet,
+                last_message_at=msg.internal_date,
+                is_inbox=msg.is_inbox,
+                has_custom_label=msg.has_custom_label,
                 last_synced_at=now,
             )
             for msg in best.values()

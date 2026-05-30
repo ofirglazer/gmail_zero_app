@@ -19,14 +19,15 @@ live engine and are specific to infrastructure tests.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Generator
 
 import pytest
 from sqlalchemy import Engine, inspect, text
 
 from domain.models.daily_snapshot import DailySnapshot
 from domain.models.label import Label, LabelType
-from domain.models.message import make_message
+from domain.models.message import Message, make_message
 from domain.models.sync_state import SyncState, SyncType
 from domain.models.thread import Thread
 from infrastructure.persistence.database import build_engine, get_session, initialise_db
@@ -54,7 +55,7 @@ def engine() -> Engine:
 
 
 @pytest.fixture
-def session(engine: Engine):
+def session(engine: Engine) -> Generator[Session, None, None]:
     """Open session that rolls back after each test (isolation without teardown)."""
     with get_session(engine) as s:
         yield s
@@ -117,7 +118,7 @@ def _make_inbox_message(
     sender: str = "sender@example.com",
     days_old: int = 3,
     size: int = 10_000,
-) -> make_message.__annotations__:  # type: ignore[return]
+) -> Message:
     return make_message(
         id=msg_id,
         thread_id=thread_id,
@@ -137,7 +138,7 @@ def _make_archived_message(
     thread_id: str = "thread_001",
     sender: str = "news@example.com",
     has_label: bool = False,
-) -> make_message.__annotations__:  # type: ignore[return]
+) -> Message:
     labels: frozenset[str] = (
         frozenset({"Label_custom"}) if has_label else frozenset()
     )
@@ -157,7 +158,7 @@ def _make_archived_message(
 def _make_sent_message(
     msg_id: str = "msg_sent_001",
     thread_id: str = "thread_001",
-) -> make_message.__annotations__:  # type: ignore[return]
+) -> Message:
     return make_message(
         id=msg_id,
         thread_id=thread_id,
@@ -226,7 +227,7 @@ class TestDatabaseInitialisation:
             result = conn.execute(text("PRAGMA foreign_keys")).scalar()
         assert result == 1
 
-    def test_wal_mode_enabled(self, tmp_path: pytest.fixture) -> None:  # type: ignore[valid-type]
+    def test_wal_mode_enabled(self, tmp_path: Path) -> None:
         """SQLite WAL journal mode must be configured for file-based databases."""
         db_path = tmp_path / "test_wal.db"
         file_engine = build_engine(f"sqlite:///{db_path}")
