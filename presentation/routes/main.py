@@ -215,7 +215,6 @@ def archive() -> str:
         default_sort_dir="asc",
         allowed_sort_by={"sender_domain", "sender", "subject", "internal_date", "size_estimate"},
     )
-    messages = g.msg_repo.list_archive_unlabelled(limit=200)
     messages = g.msg_repo.list_archive_unlabelled(
         limit=200,
         sort_by=sort_by,
