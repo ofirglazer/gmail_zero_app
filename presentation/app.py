@@ -31,7 +31,7 @@ import os
 from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
-from flask import Flask, g, render_template
+from flask import Flask, g, render_template, url_for
 
 from application.services.analytics_service import AnalyticsService
 from application.services.label_service import LabelService
@@ -254,6 +254,42 @@ def create_app(
             "is_demo": g.settings.is_demo,
             "request_endpoint": flask_request.endpoint,
         }
+
+    @app.context_processor
+    def _inject_query_helpers() -> dict[str, Any]:
+        """Inject small helpers for query-string-preserving links."""
+        from flask import request as flask_request
+
+        def _query_url(endpoint: str, **updates: Any) -> str:
+            params = flask_request.args.to_dict(flat=True)
+            for key, value in updates.items():
+                if value is None or value == "":
+                    params.pop(key, None)
+                else:
+                    params[key] = value
+            return url_for(endpoint, **params)
+
+        def _sort_url(
+            endpoint: str,
+            *,
+            sort_by: str,
+            default_dir: str = "asc",
+            page: int = 1,
+            **updates: Any,
+        ) -> str:
+            params = flask_request.args.to_dict(flat=True)
+            current_sort = params.get("sort")
+            current_dir = params.get("dir", default_dir)
+            next_dir = "desc" if current_sort == sort_by and current_dir == "asc" else "asc"
+
+            params.update({k: v for k, v in updates.items() if v not in (None, "")})
+            params["sort"] = sort_by
+            params["dir"] = next_dir if current_sort == sort_by else default_dir
+            if page is not None:
+                params["page"] = page
+            return url_for(endpoint, **params)
+
+        return {"query_url": _query_url, "sort_url": _sort_url}
 
     # ── Jinja2 filters ────────────────────────────────────────────────────────
 

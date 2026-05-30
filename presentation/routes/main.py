@@ -34,6 +34,27 @@ main_bp = Blueprint("main", __name__)
 # Default rows per page for paginated views
 _DEFAULT_PER_PAGE = 50
 
+_WORKFLOW_LABEL_SUFFIXES = {"To-Archive", "To-Remove"}
+
+
+def _parse_sort_params(
+    *,
+    default_sort_by: str,
+    default_sort_dir: str,
+    allowed_sort_by: set[str],
+) -> tuple[str, str]:
+    sort_by = request.args.get("sort", default_sort_by).strip()
+    sort_dir = request.args.get("dir", default_sort_dir).strip().lower()
+    if sort_by not in allowed_sort_by:
+        sort_by = default_sort_by
+    if sort_dir not in {"asc", "desc"}:
+        sort_dir = default_sort_dir
+    return sort_by, sort_dir
+
+
+def _show_workflow_labels() -> bool:
+    return request.args.get("show_workflow_labels", "").strip() in {"1", "true", "yes"}
+
 
 # ## Root redirect ##
 
@@ -138,8 +159,23 @@ def inbox() -> str:
     page = max(1, request.args.get("page", 1, type=int))
     per_page = min(200, max(1, request.args.get("per_page", _DEFAULT_PER_PAGE, type=int)))
     offset = (page - 1) * per_page
+    sort_by, sort_dir = _parse_sort_params(
+        default_sort_by="internal_date",
+        default_sort_dir="desc",
+        allowed_sort_by={"internal_date", "sender_domain", "sender", "recipient", "subject", "size_estimate"},
+    )
+    sort_by, sort_dir = _parse_sort_params(
+        default_sort_by="internal_date",
+        default_sort_dir="asc",
+        allowed_sort_by={"internal_date", "sender_domain", "subject", "size_estimate"},
+    )
 
-    messages = g.msg_repo.list_inbox(oldest_first=True, limit=per_page, offset=offset)
+    messages = g.msg_repo.list_inbox(
+        limit=per_page,
+        offset=offset,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     total_count = g.msg_repo.count_inbox()
     total_pages = max(1, math.ceil(total_count / per_page))
 
@@ -151,6 +187,9 @@ def inbox() -> str:
         total_count=total_count,
         total_pages=total_pages,
         user_labels=g.label_repo.list_user_labels(),
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        show_workflow_labels=_show_workflow_labels(),
     )
 
 
@@ -171,14 +210,37 @@ def archive() -> str:
         grouped_by_domain dict[str, list[Message]] — domain → messages mapping
                           for the domain-based bulk-action UX in Step 7.
     """
+    sort_by, sort_dir = _parse_sort_params(
+        default_sort_by="sender_domain",
+        default_sort_dir="asc",
+        allowed_sort_by={"sender_domain", "sender", "subject", "internal_date", "size_estimate"},
+    )
     messages = g.msg_repo.list_archive_unlabelled(limit=200)
+    messages = g.msg_repo.list_archive_unlabelled(
+        limit=200,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     total_count = g.msg_repo.count_archive_unlabelled()
+    to_archive_label = g.label_repo.get_by_name("ZeroApp/To-Archive")
+    archive_to_archive_count = (
+        g.msg_repo.count_search(
+            MessageFilter(
+                label_id=to_archive_label.id,
+                is_archived=True,
+                limit=1,
+            )
+        )
+        if to_archive_label is not None
+        else 0
+    )
 
     # Group by sender_domain; preserve order (domains appear in the order
     # list_archive_unlabelled returns them — already sorted by domain ASC)
     grouped_by_domain: dict[str, list[Message]] = defaultdict(list)
     for msg in messages:
         grouped_by_domain[msg.sender_domain].append(msg)
+    grouped_by_domain = dict(sorted(grouped_by_domain.items(), key=lambda item: item[0]))
 
     return render_template(
         "archive.html",
@@ -186,6 +248,10 @@ def archive() -> str:
         total_count=total_count,
         grouped_by_domain=dict(grouped_by_domain),
         user_labels=g.label_repo.list_user_labels(),
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        show_workflow_labels=_show_workflow_labels(),
+        archive_to_archive_count=archive_to_archive_count,
     )
 
 
@@ -201,7 +267,16 @@ def sent() -> str:
         messages     list[Message] — up to 200 sent messages.
         total_count  int — count of unresolved sent messages.
     """
-    messages = g.msg_repo.list_sent(oldest_first=True, limit=200)
+    sort_by, sort_dir = _parse_sort_params(
+        default_sort_by="internal_date",
+        default_sort_dir="asc",
+        allowed_sort_by={"internal_date", "recipient", "subject", "size_estimate"},
+    )
+    messages = g.msg_repo.list_sent(
+        limit=200,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     total_count = g.msg_repo.count_sent_unresolved()
 
     return render_template(
@@ -209,6 +284,9 @@ def sent() -> str:
         messages=messages,
         total_count=total_count,
         user_labels=g.label_repo.list_user_labels(),
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        show_workflow_labels=_show_workflow_labels(),
     )
 
 
@@ -225,7 +303,12 @@ def size() -> str:
         total_size_bytes int — total size of all messages in the mailbox.
         total_size_gb    float — total_size_bytes expressed in GB.
     """
-    messages = g.msg_repo.list_largest(limit=100)
+    sort_by, sort_dir = _parse_sort_params(
+        default_sort_by="size_estimate",
+        default_sort_dir="desc",
+        allowed_sort_by={"size_estimate", "sender_domain", "sender", "recipient", "subject", "internal_date"},
+    )
+    messages = g.msg_repo.list_largest(limit=100, sort_by=sort_by, sort_dir=sort_dir)
     total_size_bytes = g.msg_repo.total_size_bytes()
     total_size_gb = round(total_size_bytes / (1024 ** 3), 3)
 
@@ -234,6 +317,10 @@ def size() -> str:
         messages=messages,
         total_size_bytes=total_size_bytes,
         total_size_gb=total_size_gb,
+        user_labels=g.label_repo.list_user_labels(),
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+        show_workflow_labels=_show_workflow_labels(),
     )
 
 
@@ -336,6 +423,7 @@ def search() -> str:
         page=page,
         per_page=per_page,
         user_labels=user_labels,
+        show_workflow_labels=_show_workflow_labels(),
     )
 
 

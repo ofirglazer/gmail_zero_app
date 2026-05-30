@@ -1,11 +1,20 @@
 # TODO
 
-## orders for Claude
-* explain or fix each error in mypy check.
+## orders for next step
+* all test must pass, all Ruff fixed or explained, all mypy fixed or explained.
 * Show class, data flow, sequence and ladder UML diagrams.
-* what is the difference between message.py def is_large and GMAIL_ZERO_LARGE_MESSAGE_THRESHOLD_BYTES?
 * Finish Step 7 implementation.
-
+* search page
+* in archive page, order the label action bar to the right, similar to inbox page.  
+* in archive page, add table card title chip teal to show total number of unlabeled messages in archive.  
+* in archive page, add button to remove To-Archive label from {current number of messages in archive labeled "To-Archive"} from messages in archive.
+* in size zero page, add labeling UI as in the other pages.
+* in all pages enable user to sort by ascending or descending fields by pressing column headers, similar to excel table.
+* in all pages add in the table card header a checkbox to show/hide messages labels To-Remove or To-Archive. Default is hide.
+* in the dashboard add "Ready to archive" and "Ready to delete " count on the dashboard. It is a temporary counter card, makes the handoff explicit and gives a satisfying number to drive to zero outside the app.
+* in size zero page and in search page, allow user to modify labels of messages.
+* read snippets and display them in table in the different pages, in a 2nd line for each message, similar UI to gmail website.
+* allow double click or pressing Full Message when hovering over a message to see it in a reading pane to the right, similar to gmail reading pane. The entire message text without attachment will be downloaded and displayed there. Support keyboard shortcuts: Esc to close modal, Enter to open, arrow keys to move between messages.
 
 
 ## for production 

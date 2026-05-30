@@ -291,7 +291,7 @@ class TestSettings:
         assert "Incremental sync now" in html
         assert "Inbox cleanup instructions" in html
         assert "Label every message in the app" in html
-        assert "Archive in Gmail" in html
+        assert "Archive and Delete in Gmail" in html
 
     def test_settings_shows_sync_history(self, synced_app: FlaskClient) -> None:
         """Settings page must list the completed full sync."""

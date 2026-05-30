@@ -29,6 +29,8 @@ class DashboardSummary:
         sent_unresolved_count:       Sent messages with no workflow label.
         total_size_bytes:            Estimated total size of all messages.
         custom_label_coverage_pct:   Percentage of messages with a custom label (0-100).
+        ready_to_archive_count:      Inbox messages marked ZeroApp/To-Archive.
+        ready_to_delete_count:       Inbox messages marked ZeroApp/To-Remove.
         last_synced_at:              UTC datetime of most recent sync, or None if never synced.
         old_inbox_thread_count:      Inbox threads older than settings.old_thread_threshold_days.
     """
@@ -39,6 +41,8 @@ class DashboardSummary:
     sent_unresolved_count: int
     total_size_bytes: int
     custom_label_coverage_pct: float
+    ready_to_archive_count: int
+    ready_to_delete_count: int
     last_synced_at: datetime | None
     old_inbox_thread_count: int
 

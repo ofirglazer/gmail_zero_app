@@ -58,6 +58,8 @@ class MessageFilter:
     is_sent: bool | None = None
     is_archived: bool | None = None
     has_custom_label: bool | None = None
+    sort_by: str | None = None
+    sort_dir: str | None = None
     limit: int = 200
     offset: int = 0
 
@@ -77,6 +79,37 @@ class MessageRepository:
 
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    def _order_clauses(
+        self,
+        *,
+        sort_by: str,
+        sort_dir: str,
+        default_sort_by: str,
+        default_sort_dir: str,
+    ) -> list:
+        column_map = {
+            "internal_date": MessageORM.internal_date,
+            "sender": MessageORM.sender,
+            "sender_domain": MessageORM.sender_domain,
+            "recipient": MessageORM.recipient,
+            "subject": MessageORM.subject,
+            "size_estimate": MessageORM.size_estimate,
+        }
+        key = sort_by if sort_by in column_map else default_sort_by
+        direction = sort_dir if sort_dir in {"asc", "desc"} else default_sort_dir
+        column = column_map[key]
+        primary = column.asc() if direction == "asc" else column.desc()
+
+        if key == "internal_date":
+            return [primary]
+
+        secondary = (
+            MessageORM.internal_date.asc()
+            if direction == "asc"
+            else MessageORM.internal_date.desc()
+        )
+        return [primary, secondary]
 
     # ── Write operations ──────────────────────────────────────────────────────
 
@@ -227,6 +260,8 @@ class MessageRepository:
         limit: int = 200,
         offset: int = 0,
         oldest_first: bool = True,
+        sort_by: str | None = None,
+        sort_dir: str | None = None,
     ) -> list[Message]:
         """
         Return all messages currently in the inbox.
@@ -241,15 +276,17 @@ class MessageRepository:
         Returns:
             List of domain Message entities.
         """
-        order = (
-            MessageORM.internal_date.asc()
-            if oldest_first
-            else MessageORM.internal_date.desc()
+        default_sort_dir = "asc" if oldest_first else "desc"
+        clauses = self._order_clauses(
+            sort_by=sort_by or "internal_date",
+            sort_dir=sort_dir or default_sort_dir,
+            default_sort_by="internal_date",
+            default_sort_dir=default_sort_dir,
         )
         stmt = (
             select(MessageORM)
             .where(MessageORM.is_inbox.is_(True))
-            .order_by(order)
+            .order_by(*clauses)
             .limit(limit)
             .offset(offset)
         )
@@ -275,6 +312,8 @@ class MessageRepository:
         *,
         limit: int = 200,
         offset: int = 0,
+        sort_by: str | None = None,
+        sort_dir: str | None = None,
     ) -> list[Message]:
         """
         Return archived messages that have no custom user label.
@@ -297,8 +336,12 @@ class MessageRepository:
                 MessageORM.has_custom_label.is_(False),
             )
             .order_by(
-                MessageORM.sender_domain.asc(),
-                MessageORM.internal_date.asc(),
+                *self._order_clauses(
+                    sort_by=sort_by or "sender_domain",
+                    sort_dir=sort_dir or "asc",
+                    default_sort_by="sender_domain",
+                    default_sort_dir="asc",
+                )
             )
             .limit(limit)
             .offset(offset)
@@ -322,6 +365,8 @@ class MessageRepository:
         limit: int = 200,
         offset: int = 0,
         oldest_first: bool = True,
+        sort_by: str | None = None,
+        sort_dir: str | None = None,
     ) -> list[Message]:
         """
         Return all sent messages.
@@ -334,15 +379,17 @@ class MessageRepository:
         Returns:
             List of domain Message entities.
         """
-        order = (
-            MessageORM.internal_date.asc()
-            if oldest_first
-            else MessageORM.internal_date.desc()
+        default_sort_dir = "asc" if oldest_first else "desc"
+        clauses = self._order_clauses(
+            sort_by=sort_by or "internal_date",
+            sort_dir=sort_dir or default_sort_dir,
+            default_sort_by="internal_date",
+            default_sort_dir=default_sort_dir,
         )
         stmt = (
             select(MessageORM)
             .where(MessageORM.is_sent.is_(True))
-            .order_by(order)
+            .order_by(*clauses)
             .limit(limit)
             .offset(offset)
         )
@@ -371,6 +418,8 @@ class MessageRepository:
         limit: int = 50,
         is_inbox: bool | None = None,
         is_sent: bool | None = None,
+        sort_by: str | None = None,
+        sort_dir: str | None = None,
     ) -> list[Message]:
         """
         Return messages sorted by size descending.
@@ -392,10 +441,16 @@ class MessageRepository:
         if is_sent is True:
             conditions.append(MessageORM.is_sent.is_(True))
 
+        clauses = self._order_clauses(
+            sort_by=sort_by or "size_estimate",
+            sort_dir=sort_dir or "desc",
+            default_sort_by="size_estimate",
+            default_sort_dir="desc",
+        )
         stmt = (
             select(MessageORM)
             .where(*conditions)
-            .order_by(MessageORM.size_estimate.desc())
+            .order_by(*clauses)
             .limit(limit)
         )
         rows = self._session.execute(stmt).scalars().all()
@@ -548,11 +603,15 @@ class MessageRepository:
                 MessageORM.id == MessageLabelORM.message_id,
             ).where(MessageLabelORM.label_id == filters.label_id)
 
-        stmt = (
-            stmt.order_by(MessageORM.internal_date.desc())
-            .limit(filters.limit)
-            .offset(filters.offset)
+        sort_by = getattr(filters, "sort_by", None) if hasattr(filters, "sort_by") else None
+        sort_dir = getattr(filters, "sort_dir", None) if hasattr(filters, "sort_dir") else None
+        clauses = self._order_clauses(
+            sort_by=sort_by or "internal_date",
+            sort_dir=sort_dir or "desc",
+            default_sort_by="internal_date",
+            default_sort_dir="desc",
         )
+        stmt = stmt.order_by(*clauses).limit(filters.limit).offset(filters.offset)
         rows = self._session.execute(stmt).scalars().all()
         return [r.to_domain() for r in rows]
 
