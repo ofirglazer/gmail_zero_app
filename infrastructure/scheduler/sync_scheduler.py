@@ -33,14 +33,15 @@ Design:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from contextlib import AbstractContextManager
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any
 
 from domain.exceptions import IncrementalSyncError
 
 if TYPE_CHECKING:
-    from config.settings import Settings
     from application.services.sync_service import SyncService
+    from config.settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ class SyncScheduler:
         self._settings = settings
         self._incremental_interval_minutes = incremental_interval_minutes
         self._full_sync_hour = full_sync_hour
-        self._scheduler: object | None = None  # APScheduler instance, type-erased
+        self._scheduler: Any = None  # APScheduler instance, type-erased
 
     def start(self) -> None:
         """
@@ -152,7 +153,7 @@ class SyncScheduler:
         """
         if self._scheduler is not None:
             # APScheduler's shutdown() method — type-erased but present
-            getattr(self._scheduler, "shutdown")(wait=wait)
+            self._scheduler.shutdown(wait=wait)
             self._scheduler = None
             logger.info("SyncScheduler stopped.")
 

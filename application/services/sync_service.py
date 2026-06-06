@@ -157,6 +157,13 @@ class SyncService:
         self._label_repo.upsert_many(labels)
         self._session.commit()
 
+        # ── Step 3b: Rebuild message-label junction ───────────────────────────
+        # upsert_many writes only the denormalised raw_label_ids column; the
+        # normalised message_labels junction (which label_id-filtered queries
+        # join on) must be re-derived now that the label registry exists.
+        self._label_repo.rebuild_message_label_junction()
+        self._session.commit()
+
         # ── Step 4: Capture historyId high-water mark ─────────────────────────
         profile = self._client.get_profile()
         history_id: str = profile["historyId"]
@@ -259,6 +266,10 @@ class SyncService:
             self._sync_repo.upsert_threads(threads)
 
             self._msg_repo.upsert_many(messages)
+            # Keep the normalised junction in step with raw_label_ids so
+            # label_id-filtered queries see the changed messages' labels.
+            for message in messages:
+                self._label_repo.sync_message_labels(message.id, message.label_ids)
             total_synced += len(messages)
             self._session.commit()
             self._rate_limit_sleep()

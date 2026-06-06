@@ -29,11 +29,13 @@ import atexit
 import logging
 import os
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from flask import Flask, g, render_template, url_for
+from sqlalchemy import Engine
 
 from application.services.analytics_service import AnalyticsService
+from application.services.label_config_service import LabelConfigService
 from application.services.label_service import LabelService
 from application.services.search_service import SearchService
 from application.services.sync_service import SyncService
@@ -49,17 +51,73 @@ from infrastructure.persistence.repositories.sync_state_repository import SyncSt
 from infrastructure.scheduler.sync_scheduler import SyncScheduler
 
 logging.basicConfig(level=logging.WARNING)
+# logging.basicConfig(level=logging.INFO)
+# Configure Werkzeug specifically
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
+logging.getLogger('flask').setLevel(logging.WARNING)
+
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from datetime import datetime
     from typing import Any
 
-    from sqlalchemy import Engine
-
     from infrastructure.gmail.client import AbstractGmailClient
 
 logger = logging.getLogger(__name__)
+
+
+def _seed_demo_snapshots(engine: Engine) -> None:
+    """
+    Populate demo database with 90 days of historical snapshot data.
+
+    Creates synthetic daily snapshots showing realistic trends:
+    inbox count decreasing, archive unlabelled count decreasing, and custom
+    label coverage increasing. This allows the dashboard to display meaningful
+    progress graphs on first load in demo mode, with sufficient data for both
+    30-day and 90-day views.
+
+    Args:
+        engine: SQLAlchemy Engine for the demo database.
+    """
+    from datetime import date, timedelta
+    from sqlalchemy import delete
+    from infrastructure.persistence.models import DailySnapshotORM
+    from infrastructure.persistence.repositories.snapshot_repository import (
+        SnapshotRepository,
+    )
+    from domain.models.daily_snapshot import DailySnapshot
+
+    with get_session(engine) as session:
+        repo = SnapshotRepository(session)
+
+        # Only seed if we don't have 90 days of data (allow re-seed from old 30-day data)
+        count = repo.count()
+        if count >= 90:
+            logger.info("Demo snapshots already cover 90+ days; skipping seed.")
+            return
+
+        if count > 0:
+            logger.info("Clearing old snapshots to re-seed with 90 days of data.")
+            session.execute(delete(DailySnapshotORM))
+            session.commit()
+
+        today = date.today()
+        for i in range(90, 0, -1):
+            snapshot_date = today - timedelta(days=i)
+            repo.upsert(
+                DailySnapshot(
+                    snapshot_date=snapshot_date,
+                    inbox_count=200 - (i // 3),  # Decreasing: 200 → 170
+                    inbox_size_bytes=500_000_000 - (i // 3) * 2_000_000,  # 500MB → 440MB
+                    archive_unlabelled_count=80 - (i // 3),  # 80 → 50
+                    sent_unresolved_count=40 - (i // 6),  # 40 → 25
+                    total_size_bytes=2_000_000_000 - (i // 3) * 10_000_000,  # 2GB → 1.7GB
+                    custom_label_coverage_pct=10.0 + (i // 3) * 0.15,  # 10% → 25%
+                )
+            )
+
+        logger.info("Seeded demo database with 90 days of historical snapshots.")
 
 
 def create_app(
@@ -104,6 +162,13 @@ def create_app(
         engine = build_engine(settings.db_url)
     initialise_db(engine)
 
+    # ── Demo mode: seed historical snapshot data ──────────────────────────────
+    # In demo mode, populate the database with 30 days of progress data so the
+    # dashboard shows meaningful trends on first load.
+
+    if settings.is_demo:
+        _seed_demo_snapshots(engine)
+
     # ── Gmail client ──────────────────────────────────────────────────────────
 
     client: AbstractGmailClient
@@ -122,6 +187,20 @@ def create_app(
 
     mapper = GmailMapper(user_email=getattr(client, "user_email", "user@gmail.com"))
     guard = SafetyGuard()
+
+    # ── Ensure managed labels exist at startup ────────────────────────────────
+    # Call LabelConfigService.ensure_labels_exist() before scheduler starts
+    # so all ZeroApp/* labels are created in Gmail (or mock).
+
+    logger.info("Ensuring managed labels exist in Gmail…")
+    with get_session(engine) as _boot_session:
+        _label_repo = LabelRepository(_boot_session)
+        LabelConfigService(
+            client=client,
+            label_repo=_label_repo,
+            labels_config_path=settings.labels_config_path,
+        ).ensure_labels_exist()
+    logger.info("Label bootstrap complete.")
 
     # ── Store dependencies on app for access in before_request ───────────────
 
@@ -248,11 +327,18 @@ def create_app(
         ``is_demo``: bool — True when running with MockGmailClient.
         ``request_endpoint``: str — current Flask endpoint name, used by
             the nav to highlight the active link.
+        ``labels_by_id``: dict[str, str] — mapping of Gmail label ID to
+            display name, used by message-row label chips to show names
+            instead of raw IDs.
         """
         from flask import request as flask_request
+        labels_by_id: dict[str, str] = {
+            lbl.id: lbl.name for lbl in g.label_repo.list_all()
+        }
         return {
             "is_demo": g.settings.is_demo,
             "request_endpoint": flask_request.endpoint,
+            "labels_by_id": labels_by_id,
         }
 
     @app.context_processor
@@ -261,12 +347,12 @@ def create_app(
         from flask import request as flask_request
 
         def _query_url(endpoint: str, **updates: Any) -> str:
-            params = flask_request.args.to_dict(flat=True)
+            params: dict[str, Any] = flask_request.args.to_dict(flat=True)
             for key, value in updates.items():
                 if value is None or value == "":
                     params.pop(key, None)
                 else:
-                    params[key] = value
+                    params[key] = str(value)
             return url_for(endpoint, **params)
 
         def _sort_url(
@@ -277,16 +363,16 @@ def create_app(
             page: int = 1,
             **updates: Any,
         ) -> str:
-            params = flask_request.args.to_dict(flat=True)
+            params: dict[str, Any] = flask_request.args.to_dict(flat=True)
             current_sort = params.get("sort")
             current_dir = params.get("dir", default_dir)
             next_dir = "desc" if current_sort == sort_by and current_dir == "asc" else "asc"
 
-            params.update({k: v for k, v in updates.items() if v not in (None, "")})
+            params.update({k: str(v) for k, v in updates.items() if v not in (None, "")})
             params["sort"] = sort_by
             params["dir"] = next_dir if current_sort == sort_by else default_dir
             if page is not None:
-                params["page"] = page
+                params["page"] = str(page)
             return url_for(endpoint, **params)
 
         return {"query_url": _query_url, "sort_url": _sort_url}

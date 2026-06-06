@@ -730,3 +730,273 @@ class TestGmailMapperHelpers:
         assert isinstance(client, AbstractGmailClient), (
             "MockGmailClient does not satisfy AbstractGmailClient protocol"
         )
+
+
+# ── GmailClient API call delegation ──────────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestGmailClientAPIOperations:
+    """GmailClient delegates every method call to the Google API service object."""
+
+    def test_list_messages_returns_service_response(self) -> None:
+        """list_messages returns the raw dict from the Gmail API."""
+        client = _make_gmail_client()
+        expected: dict[str, Any] = {"messages": [{"id": "m1", "threadId": "t1"}], "resultSizeEstimate": 1}
+        client._service.users.return_value.messages.return_value.list.return_value.execute.return_value = expected
+        assert client.list_messages(max_results=10) == expected
+
+    def test_list_messages_passes_all_kwargs_to_service(self) -> None:
+        """list_messages forwards all parameters to the underlying API call."""
+        client = _make_gmail_client()
+        msgs = client._service.users.return_value.messages.return_value
+        msgs.list.return_value.execute.return_value = {"messages": []}
+        client.list_messages(max_results=25, label_ids=["INBOX", "UNREAD"], include_spam_trash=True)
+        msgs.list.assert_called_once_with(
+            userId="me",
+            maxResults=25,
+            pageToken=None,
+            labelIds=["INBOX", "UNREAD"],
+            includeSpamTrash=True,
+        )
+
+    def test_get_message_returns_service_response(self) -> None:
+        """get_message returns the raw dict from the Gmail API."""
+        client = _make_gmail_client()
+        expected = {"id": "msg001", "threadId": "t1", "labelIds": ["INBOX"]}
+        client._service.users.return_value.messages.return_value.get.return_value.execute.return_value = expected
+        assert client.get_message("msg001") == expected
+
+    def test_get_message_passes_id_format_and_headers(self) -> None:
+        """get_message forwards all parameters including format and metadata_headers."""
+        client = _make_gmail_client()
+        msgs = client._service.users.return_value.messages.return_value
+        msgs.get.return_value.execute.return_value = {"id": "msg001"}
+        client.get_message("msg001", format="minimal", metadata_headers=["From", "Subject"])
+        msgs.get.assert_called_once_with(
+            userId="me",
+            id="msg001",
+            format="minimal",
+            metadataHeaders=["From", "Subject"],
+        )
+
+    def test_batch_get_messages_returns_one_result_per_id(self) -> None:
+        """batch_get_messages returns as many results as input IDs."""
+        client = _make_gmail_client()
+        msgs = client._service.users.return_value.messages.return_value
+        msgs.get.return_value.execute.return_value = {"id": "any", "labelIds": []}
+        results = client.batch_get_messages(["msg001", "msg002", "msg003"])
+        assert len(results) == 3
+
+    def test_batch_get_messages_calls_get_for_each_id(self) -> None:
+        """batch_get_messages calls get_message once per message ID."""
+        client = _make_gmail_client()
+        msgs = client._service.users.return_value.messages.return_value
+        msgs.get.return_value.execute.return_value = {"id": "any", "labelIds": []}
+        client.batch_get_messages(["msg001", "msg002"])
+        assert msgs.get.call_count == 2
+
+    def test_list_labels_returns_service_response(self) -> None:
+        """list_labels returns the raw dict from the Gmail API."""
+        client = _make_gmail_client()
+        expected = {"labels": [{"id": "INBOX", "name": "INBOX", "type": "system"}]}
+        client._service.users.return_value.labels.return_value.list.return_value.execute.return_value = expected
+        assert client.list_labels() == expected
+
+    def test_get_label_returns_service_response(self) -> None:
+        """get_label returns the raw dict from the Gmail API."""
+        client = _make_gmail_client()
+        expected = {"id": "Label_001", "name": "ZeroApp/Needs-Action", "type": "user"}
+        client._service.users.return_value.labels.return_value.get.return_value.execute.return_value = expected
+        assert client.get_label("Label_001") == expected
+
+    def test_create_label_returns_service_response(self) -> None:
+        """create_label returns the newly created label resource."""
+        client = _make_gmail_client()
+        expected = {"id": "Label_new", "name": "ZeroApp/Test", "type": "user"}
+        client._service.users.return_value.labels.return_value.create.return_value.execute.return_value = expected
+        assert client.create_label("ZeroApp/Test") == expected
+
+    def test_create_label_sends_correct_body(self) -> None:
+        """create_label includes name, messageListVisibility, and labelListVisibility in the request body."""
+        client = _make_gmail_client()
+        labels = client._service.users.return_value.labels.return_value
+        labels.create.return_value.execute.return_value = {"id": "Label_x", "name": "ZeroApp/X"}
+        client.create_label("ZeroApp/X")
+        call_kwargs = labels.create.call_args[1]
+        assert call_kwargs["body"]["name"] == "ZeroApp/X"
+        assert call_kwargs["body"]["messageListVisibility"] == "show"
+        assert call_kwargs["body"]["labelListVisibility"] == "labelShow"
+
+    def test_modify_message_labels_add_only_excludes_remove_key(self) -> None:
+        """modify_message_labels omits removeLabelIds from body when not provided."""
+        client = _make_gmail_client()
+        msgs = client._service.users.return_value.messages.return_value
+        msgs.modify.return_value.execute.return_value = {"id": "m1", "labelIds": ["Label_C"]}
+        client.modify_message_labels("m1", add_label_ids=["Label_C"])
+        body = msgs.modify.call_args[1]["body"]
+        assert body == {"addLabelIds": ["Label_C"]}
+
+    def test_modify_message_labels_remove_only_excludes_add_key(self) -> None:
+        """modify_message_labels omits addLabelIds from body when not provided."""
+        client = _make_gmail_client()
+        msgs = client._service.users.return_value.messages.return_value
+        msgs.modify.return_value.execute.return_value = {"id": "m1", "labelIds": []}
+        client.modify_message_labels("m1", remove_label_ids=["UNREAD"])
+        body = msgs.modify.call_args[1]["body"]
+        assert body == {"removeLabelIds": ["UNREAD"]}
+
+    def test_modify_message_labels_add_and_remove_sends_both(self) -> None:
+        """modify_message_labels includes both addLabelIds and removeLabelIds when both provided."""
+        client = _make_gmail_client()
+        msgs = client._service.users.return_value.messages.return_value
+        msgs.modify.return_value.execute.return_value = {"id": "m1", "labelIds": ["Label_C"]}
+        client.modify_message_labels("m1", add_label_ids=["Label_C"], remove_label_ids=["Label_NA"])
+        body = msgs.modify.call_args[1]["body"]
+        assert "addLabelIds" in body
+        assert "removeLabelIds" in body
+
+    def test_get_history_returns_service_response(self) -> None:
+        """get_history returns the raw dict from the Gmail API."""
+        client = _make_gmail_client()
+        expected: dict[str, Any] = {"historyId": "100050", "history": []}
+        client._service.users.return_value.history.return_value.list.return_value.execute.return_value = expected
+        assert client.get_history(start_history_id="100001") == expected
+
+    def test_get_history_passes_start_history_id_and_types(self) -> None:
+        """get_history forwards startHistoryId, historyTypes, and maxResults to the API."""
+        client = _make_gmail_client()
+        hist = client._service.users.return_value.history.return_value
+        hist.list.return_value.execute.return_value = {"historyId": "100001"}
+        client.get_history(
+            start_history_id="99999",
+            history_types=["messageAdded"],
+            max_results=100,
+        )
+        hist.list.assert_called_once_with(
+            userId="me",
+            startHistoryId="99999",
+            historyTypes=["messageAdded"],
+            maxResults=100,
+            pageToken=None,
+        )
+
+    def test_get_profile_returns_service_response(self) -> None:
+        """get_profile returns the raw dict from the Gmail API."""
+        client = _make_gmail_client()
+        expected = {"emailAddress": "user@gmail.com", "historyId": "100001", "messagesTotal": 500}
+        client._service.users.return_value.getProfile.return_value.execute.return_value = expected
+        assert client.get_profile() == expected
+
+    def test_get_message_body_extracts_text_plain_at_top_level(self) -> None:
+        """get_message_body decodes base64url text/plain body from top-level payload."""
+        import base64 as b64
+        client = _make_gmail_client()
+        body_text = "Hello, world!"
+        encoded = b64.urlsafe_b64encode(body_text.encode()).decode("ascii")
+        msgs = client._service.users.return_value.messages.return_value
+        msgs.get.return_value.execute.return_value = {
+            "id": "m1",
+            "payload": {
+                "headers": [{"name": "Content-Type", "value": "text/plain; charset=utf-8"}],
+                "body": {"data": encoded},
+            },
+        }
+        assert client.get_message_body("m1") == "Hello, world!"
+
+    def test_get_message_body_returns_empty_when_no_text_part(self) -> None:
+        """get_message_body returns empty string when no text/plain part exists."""
+        client = _make_gmail_client()
+        msgs = client._service.users.return_value.messages.return_value
+        msgs.get.return_value.execute.return_value = {
+            "id": "m1",
+            "payload": {"headers": [], "parts": []},
+        }
+        assert client.get_message_body("m1") == ""
+
+    def test_get_message_body_extracts_from_nested_multipart(self) -> None:
+        """get_message_body recurses into multipart parts to find text/plain."""
+        import base64 as b64
+        client = _make_gmail_client()
+        body_text = "Nested plain text"
+        encoded = b64.urlsafe_b64encode(body_text.encode()).decode("ascii")
+        msgs = client._service.users.return_value.messages.return_value
+        msgs.get.return_value.execute.return_value = {
+            "id": "m1",
+            "payload": {
+                "headers": [{"name": "Content-Type", "value": "multipart/alternative"}],
+                "body": {},
+                "parts": [
+                    {
+                        "headers": [{"name": "Content-Type", "value": "text/html"}],
+                        "body": {"data": b64.urlsafe_b64encode(b"<b>html</b>").decode()},
+                    },
+                    {
+                        "headers": [{"name": "Content-Type", "value": "text/plain"}],
+                        "body": {"data": encoded},
+                    },
+                ],
+            },
+        }
+        assert client.get_message_body("m1") == "Nested plain text"
+
+
+# ── GmailClient._extract_text_from_payload ────────────────────────────────────
+
+
+@pytest.mark.unit
+class TestGmailClientExtractTextFromPayload:
+    """_extract_text_from_payload handles all MIME payload structures."""
+
+    def test_text_plain_at_top_level_is_decoded(self) -> None:
+        """Payload with text/plain Content-Type header returns decoded body text."""
+        import base64 as b64
+        client = _make_gmail_client()
+        data = b64.urlsafe_b64encode(b"Hello").decode()
+        payload: dict[str, Any] = {
+            "headers": [{"name": "Content-Type", "value": "text/plain"}],
+            "body": {"data": data},
+        }
+        assert client._extract_text_from_payload(payload) == "Hello"
+
+    def test_empty_payload_returns_empty_string(self) -> None:
+        """Completely empty payload returns empty string without raising."""
+        client = _make_gmail_client()
+        assert client._extract_text_from_payload({}) == ""
+
+    def test_html_only_payload_returns_empty_string(self) -> None:
+        """Payload with only text/html returns empty string (no text/plain present)."""
+        import base64 as b64
+        client = _make_gmail_client()
+        data = b64.urlsafe_b64encode(b"<html></html>").decode()
+        payload: dict[str, Any] = {
+            "headers": [{"name": "Content-Type", "value": "text/html"}],
+            "body": {"data": data},
+        }
+        assert client._extract_text_from_payload(payload) == ""
+
+    def test_text_plain_in_nested_parts_is_found(self) -> None:
+        """Recursion finds text/plain nested inside a multipart part."""
+        import base64 as b64
+        client = _make_gmail_client()
+        data = b64.urlsafe_b64encode(b"nested text").decode()
+        payload: dict[str, Any] = {
+            "headers": [],
+            "parts": [
+                {
+                    "headers": [{"name": "Content-Type", "value": "text/plain"}],
+                    "body": {"data": data},
+                }
+            ],
+        }
+        assert client._extract_text_from_payload(payload) == "nested text"
+
+    def test_invalid_base64_does_not_raise(self) -> None:
+        """Invalid base64 data is silently ignored; returns empty string."""
+        client = _make_gmail_client()
+        payload: dict[str, Any] = {
+            "headers": [{"name": "Content-Type", "value": "text/plain"}],
+            "body": {"data": "!!!not_valid_base64!!!"},
+        }
+        result = client._extract_text_from_payload(payload)
+        assert isinstance(result, str)

@@ -15,10 +15,15 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from infrastructure.persistence.models import LabelOperationLogORM, LabelORM, MessageLabelORM
+from infrastructure.persistence.models import (
+    LabelOperationLogORM,
+    LabelORM,
+    MessageLabelORM,
+    MessageORM,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -170,6 +175,44 @@ class LabelRepository:
                 applied_at=now,
             )
             self._session.add(assoc)
+
+    def rebuild_message_label_junction(self) -> int:
+        """Rebuild the entire message-label junction from raw_label_ids.
+
+        Truncates ``message_labels`` and re-derives every association from
+        the denormalised ``MessageORM.raw_label_ids`` JSON column.  Only
+        label IDs that exist in the ``labels`` table are inserted, preserving
+        referential integrity.  Intended to run once at the end of a full
+        sync, after the label registry has been populated, so that
+        label-filtered queries (``MessageFilter.label_id``) reflect the
+        synced data.
+
+        Returns:
+            The number of association rows written.
+        """
+        import json
+
+        # -- Snapshot valid label IDs once (FK integrity) ---------------------
+        valid_label_ids: set[str] = set(
+            self._session.execute(select(LabelORM.id)).scalars()
+        )
+
+        # -- Truncate and re-derive from raw_label_ids ------------------------
+        self._session.execute(delete(MessageLabelORM))
+
+        now = datetime.now(tz=UTC)
+        rows = self._session.execute(
+            select(MessageORM.id, MessageORM.raw_label_ids)
+        ).all()
+        associations: list[dict[str, object]] = [
+            {"message_id": message_id, "label_id": label_id, "applied_at": now}
+            for message_id, raw_label_ids in rows
+            for label_id in json.loads(raw_label_ids)
+            if label_id in valid_label_ids
+        ]
+        if associations:
+            self._session.execute(insert(MessageLabelORM), associations)
+        return len(associations)
 
     def get_label_ids_for_message(self, message_id: str) -> frozenset[str]:
         """

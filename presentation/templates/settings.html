@@ -45,6 +45,32 @@
   </div>
 </div>
 
+<div class="table-card ani">
+  <div class="section-label">Font Size</div>
+  <div style="padding:22px;display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+    <label class="check-label" style="margin:0">
+      <input type="radio" name="fontsize" value="small" style="width:16px;height:16px" onchange="setFontSize('small')"> Small
+    </label>
+    <label class="check-label" style="margin:0">
+      <input type="radio" name="fontsize" value="medium" checked onchange="setFontSize('medium')"> Medium
+    </label>
+    <label class="check-label" style="margin:0">
+      <input type="radio" name="fontsize" value="large" onchange="setFontSize('large')"> Large
+    </label>
+  </div>
+  <script>
+    (function () {
+      const fs = localStorage.getItem('fontsize') || 'medium';
+      const radio = document.querySelector(`input[name="fontsize"][value="${fs}"]`);
+      if (radio) radio.checked = true;
+      window.setFontSize = function (size) {
+        document.documentElement.setAttribute('data-font', size);
+        localStorage.setItem('fontsize', size);
+      };
+    })();
+  </script>
+</div>
+
 <div class="settings-grid">
   {# ── Environment ─────────────────────────────────────────────────────────── #}
   <div class="table-card ani ani-1">
@@ -82,6 +108,26 @@
     <div class="empty" style="border:none;padding:30px 0"><div class="empty-desc">No labels synced yet.</div></div>
     {% endif %}
   </div>
+</div>
+
+{# ── Create Label ────────────────────────────────────────────────────────── #}
+<div class="table-card ani">
+  <div class="section-label">Create Label</div>
+  <form method="post" action="{{ url_for('main.create_label') }}" style="padding:22px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <label class="check-label" style="margin:0;font-weight:500;white-space:nowrap">
+      <span class="kv-mono" style="font-size:.82rem;margin-right:4px">ZeroApp/</span>
+    </label>
+    <input
+      type="text"
+      name="label_name"
+      placeholder="MyLabel"
+      required
+      maxlength="120"
+      style="flex:1;min-width:180px;max-width:320px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:.9rem"
+    >
+    <button type="submit" class="btn btn-primary btn-sm">Create</button>
+    <span class="muted" style="font-size:.8rem">Creates a <span class="kv-mono">ZeroApp/</span>-namespaced label in Gmail and adds it to the registry.</span>
+  </form>
 </div>
 
 {# ── Sync History ────────────────────────────────────────────────────────── #}

@@ -81,25 +81,33 @@ def _make_msg(
     size_bytes: int = 8_000,
     recipient: str = "me@gmail.com",
     snippet: str = "",
+    message_text: str = "",
 ) -> dict[str, Any]:
     """Build a Gmail API-shaped message dict."""
     dt = _days_ago(days_old)
+    payload: dict[str, Any] = {
+        "headers": [
+            {"name": "From", "value": sender},
+            {"name": "To", "value": recipient},
+            {"name": "Subject", "value": subject},
+            {"name": "Date", "value": dt.strftime("%a, %d %b %Y %H:%M:%S +0000")},
+        ]
+    }
+
+    if message_text:
+        payload["body"] = {"data": message_text}
+
+    effective_snippet = snippet or (message_text[:160] + "..." if message_text else f"Message content from {sender}...")
+
     return {
         "id": msg_id,
         "threadId": thread_id,
         "historyId": history_id,
         "internalDate": _ms(dt),
         "sizeEstimate": size_bytes,
-        "snippet": snippet or f"Message content from {sender}...",
+        "snippet": effective_snippet,
         "labelIds": label_ids,
-        "payload": {
-            "headers": [
-                {"name": "From", "value": sender},
-                {"name": "To", "value": recipient},
-                {"name": "Subject", "value": subject},
-                {"name": "Date", "value": dt.strftime("%a, %d %b %Y %H:%M:%S +0000")},
-            ]
-        },
+        "payload": payload,
     }
 
 
@@ -115,6 +123,8 @@ _LABEL_LARGE = "Label_LargeMessage001"
 _LABEL_REVIEW = "Label_Review001"
 _LABEL_FOLLOWUP = "Label_FollowUp001"
 _LABEL_TO_REMOVE = "Label_ToRemove001"
+_LABEL_TO_ARCHIVE = "Label_ToArchive001"
+
 
 # All user-defined labels (for labels list API response)
 _USER_LABELS: list[dict[str, Any]] = [
@@ -181,6 +191,14 @@ _USER_LABELS: list[dict[str, Any]] = [
         "messageListVisibility": "show",
         "labelListVisibility": "labelShow",
     },
+        {
+        "id": _LABEL_TO_ARCHIVE,
+        "name": "ZeroApp/To-Archive",
+        "type": "user",
+        "messageListVisibility": "show",
+        "labelListVisibility": "labelShow",
+    },
+
 ]
 
 _SYSTEM_LABELS: list[dict[str, Any]] = [
@@ -213,7 +231,7 @@ def _build_initial_dataset() -> dict[str, dict[str, Any]]:
         _make_msg("inbox001", "thread001", "h1001", 847,
                   "boss@corp.com", "Q3 budget review — please action",
                   ["INBOX", "UNREAD", "IMPORTANT"], size_bytes=42_000,
-                  snippet="Hi, please can you review the Q3 budget before the deadline"),
+                  message_text="Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium."),
 
         _make_msg("inbox002", "thread002", "h1002", 720,
                   "hr@corp.com", "Annual leave policy update 2022",
@@ -233,7 +251,7 @@ def _build_initial_dataset() -> dict[str, dict[str, Any]]:
         _make_msg("inbox005", "thread005", "h1005", 480,
                   "noreply@aws.com", "Your AWS bill for January 2023 is ready",
                   ["INBOX", "UNREAD"], size_bytes=22_400,
-                  snippet="Your AWS bill for January 2023 is $1,247.82"),
+                  message_text="Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Quis ipsum suspendisse ultrices gravida. Risus commodo viverra maecenas accumsan lacus vel facilisis volutpat. Nulla pellentesque dignissim enim sit amet venenatis urna. Ornare aenean euismod elementum nisi quis eleifend quam adipiscing vitae proin sagittis."),
 
         _make_msg("inbox006", "thread006", "h1006", 420,
                   "updates@linkedin.com", "John Smith viewed your profile",
@@ -258,11 +276,11 @@ def _build_initial_dataset() -> dict[str, dict[str, Any]]:
         _make_msg("inbox010", "thread010", "h1010", 240,
                   "newsletter@acme.com", "Monthly digest — July 2023",
                   ["INBOX", "UNREAD", "CATEGORY_PROMOTIONS"], size_bytes=_mb(1.4),
-                  snippet="Your July digest is here with highlights from this month"),
+                  message_text="Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Vivamus suscipit tortor eget felis porttitor volutpat. Praesent sapien massa, convallis a pellentesque nec, egestas non nisi. Donec sollicitudin molestie malesuada. Nulla porttitor accumsan tincidunt. Curabitur arcu erat, accumsan sit amet, sollicitudin a, malesuada sit amet eros."),
 
         _make_msg("inbox011", "thread011", "h1011", 210,
                   "support@stripe.com", "Action required: verify your account",
-                  ["INBOX", "UNREAD", "IMPORTANT"], size_bytes=8_900,
+                  ["INBOX", "UNREAD", "IMPORTANT", _LABEL_TO_ARCHIVE], size_bytes=8_900,
                   snippet="We need you to verify your Stripe account to continue"),
 
         _make_msg("inbox012", "thread012", "h1012", 180,
@@ -283,7 +301,7 @@ def _build_initial_dataset() -> dict[str, dict[str, Any]]:
         _make_msg("inbox015", "thread015", "h1015", 90,
                   "team@co.com", "Sprint retrospective notes",
                   ["INBOX", "UNREAD", _LABEL_REVIEW], size_bytes=28_000,
-                  snippet="Attached are the notes from last week's sprint retrospective"),
+                  message_text="Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Pellentesque in ipsum id orci porta dapibus. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Donec velit neque, auctor sit amet aliquam vel, ullamcorper sit amet ligula. Proin eget tortor risus cras ultricies ligula."),
 
         _make_msg("inbox016", "thread016", "h1016", 75,
                   "vendor@supply.com", "Invoice #2024-0847 is overdue",
@@ -366,7 +384,7 @@ def _build_initial_dataset() -> dict[str, dict[str, Any]]:
         _make_msg("sent001", "thread200", "h4001", 94,
                   "me@gmail.com", "Contract renewal Q4 — initial proposal",
                   ["SENT"], size_bytes=8_200, recipient="cto@partner.com",
-                  snippet="Please find our proposal for Q4 contract renewal attached"),
+                  message_text="Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Quisque velit nisi, pretium ut, posuere ac, malesuada ac, risus. Donec ut ex ac nulla pellentesque mollis in a enim. Curabitur non nulla sit amet nisl tempus convallis quis ac lectus. Donec sollicitudin molestie malesuada. Mauris blandit aliquet elit, eget tincidunt nibh pulvinar a. Vestibulum ac diam sit amet ex pellentesque consectetur."),
 
         _make_msg("sent002", "thread201", "h4002", 58,
                   "me@gmail.com", "Sprint planning notes — action items",
@@ -521,6 +539,18 @@ def _build_initial_dataset() -> dict[str, dict[str, Any]]:
             for i in range(15)
         ],
 
+        # ── ARCHIVE: Messages tagged To-Archive (pending removal) ────────────
+
+        _make_msg("arc_toarchive001", "thread_arc_ta001", "hB001", 45,
+                  "newsletter@acme.com", "Old newsletter — tagged for removal",
+                  [_LABEL_TO_ARCHIVE], size_bytes=6_000,
+                  snippet="This archived message has been tagged with To-Archive"),
+
+        _make_msg("arc_toarchive002", "thread_arc_ta002", "hB002", 120,
+                  "noreply@aws.com", "AWS bill — tagged for archive cleanup",
+                  [_LABEL_TO_ARCHIVE], size_bytes=9_500,
+                  snippet="This archived message is tagged To-Archive pending label cleanup"),
+
         # ── ARCHIVE: Large archived messages (Size Reduction targets) ─────────
 
         _make_msg("arc_vl001", "thread_arc_vl001", "hA001", 120,
@@ -584,9 +614,9 @@ class MockGmailClient:
         self._messages: dict[str, dict[str, Any]] = _build_initial_dataset()
         self._history_events: list[dict[str, Any]] = []
         # Mutable user-label registry: allows create_label to add entries
-        self._user_labels: list[dict[str, Any]] = list(
+        self._user_labels: list[dict[str, Any]] = [
             copy.deepcopy(lbl) for lbl in _USER_LABELS
-        )
+        ]
         # Counter for generating deterministic mock label IDs
         self._next_label_seq: int = 900
 
@@ -753,6 +783,18 @@ class MockGmailClient:
             "historyId": str(self._history_id),
         }
 
+    def get_message_body(self, message_id: str) -> str:
+        """Return synthetic message body text for demo purposes."""
+        if message_id not in self._messages:
+            return ""
+        msg = self._messages[message_id]
+        # Check if message has synthetic body text in payload
+        body = msg.get("payload", {}).get("body", {}).get("data", "")
+        if body:
+            return str(body)
+        # Fall back to synthetic text based on message ID
+        return f"[Mock body for message {message_id}]\n\nThis is a synthetic message body for demo purposes."
+
     # ── Demo-specific helpers ─────────────────────────────────────────────────
 
     def advance_history(self, new_message_count: int = 3) -> None:
@@ -806,6 +848,45 @@ class MockGmailClient:
     def get_label_ids_for_message(self, message_id: str) -> frozenset[str]:
         """Return the current label IDs for a message (for test assertions)."""
         return frozenset(self._messages[message_id]["labelIds"])
+
+    def modify_message(
+        self,
+        message_id: str,
+        add_labels: list[str] | None = None,
+        remove_labels: list[str] | None = None,
+    ) -> None:
+        """
+        Test-only helper: add or remove labels by name (not ID).
+
+        Translates label display names to label IDs using the in-memory registry,
+        then calls modify_message_labels. Only use this in tests or demo setup;
+        production code calls modify_message_labels directly.
+
+        Args:
+            message_id:    Gmail message ID.
+            add_labels:    Label display names to add (e.g. ``["ZeroApp/To-Archive"]``).
+            remove_labels: Label display names to remove.
+        """
+        all_labels: dict[str, str] = {
+            lbl["name"]: lbl["id"]
+            for lbl in _SYSTEM_LABELS + self._user_labels
+        }
+
+        add_ids = (
+            [all_labels[name] for name in add_labels if name in all_labels]
+            if add_labels
+            else None
+        )
+        remove_ids = (
+            [all_labels[name] for name in remove_labels if name in all_labels]
+            if remove_labels
+            else None
+        )
+        self.modify_message_labels(
+            message_id,
+            add_label_ids=add_ids or None,
+            remove_label_ids=remove_ids or None,
+        )
 
     # ── Private helpers ───────────────────────────────────────────────────────
 

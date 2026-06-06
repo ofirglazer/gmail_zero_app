@@ -24,6 +24,8 @@
   </div>
 </div>
 
+{{ render_page_info(page_info) }}
+
 {# ── Goal Cards ──────────────────────────────────────────────────────────── #}
 <div class="goal-grid">
 
@@ -81,14 +83,38 @@
 
 </div>
 
+{# ── Ready-State Counters ───────────────────────────────────────────────────── #}
+<div class="goal-grid">
+
+  <div class="stat-card stat-card--archive ani">
+    <div class="stat-icon">📋</div>
+    <div class="stat-label">Ready to Archive</div>
+    <div class="stat-metric">{{ summary.ready_to_archive_count }}</div>
+    <div class="stat-sub">messages labeled To-Archive</div>
+  </div>
+
+  <div class="stat-card stat-card--delete ani">
+    <div class="stat-icon">🗑</div>
+    <div class="stat-label">Ready to Delete</div>
+    <div class="stat-metric">{{ summary.ready_to_delete_count }}</div>
+    <div class="stat-sub">messages labeled To-Remove</div>
+  </div>
+
+</div>
+
 {# ── Progress Chart ──────────────────────────────────────────────────────── #}
 <div class="chart-card ani">
   <div class="chart-card-hdr">
     <div>
-      <div class="chart-card-title">30-Day Progress</div>
+      <div class="chart-card-title" id="chartTitle">30-Day Progress</div>
       <div class="chart-card-sub">Messages across all four workflows over time</div>
     </div>
     <div class="chart-legend">
+      <div class="days-toggle" style="display:flex;gap:6px;margin-right:12px;">
+        <button class="btn btn-sm btn-primary days-btn" data-days="30" aria-pressed="true">30d</button>
+        <button class="btn btn-sm btn-secondary days-btn" data-days="90" aria-pressed="false">90d</button>
+      </div>
+
       <label class="legend-item">
         <input type="checkbox" data-dataset="0" checked>
         <span class="legend-dot" style="background:#21cad2"></span>
@@ -105,6 +131,18 @@
         <input type="checkbox" data-dataset="2" checked>
         <span class="legend-dot" style="background:#f59e0b"></span>
         Sent unresolved
+      </label>
+
+      <label class="legend-item">
+        <input type="checkbox" data-dataset="3" checked>
+        <span class="legend-dot" style="background:#10b981"></span>
+        Mailbox size (MB)
+      </label>
+
+      <label class="legend-item">
+        <input type="checkbox" data-dataset="4" checked>
+        <span class="legend-dot" style="background:#ec4899"></span>
+        Label coverage %
       </label>
 
       <label class="legend-item" style="cursor:pointer;">
@@ -136,78 +174,367 @@
   </div>
 </div>
 {% endif %}
+
+{# ── Storage Breakdown Charts ─────────────────────────────────────────────── #}
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:28px" id="breakdownGrid">
+
+  <div class="chart-card ani" style="margin-bottom:0;min-width:0;overflow:hidden">
+    <div class="chart-card-hdr" style="flex-wrap:wrap;gap:8px">
+      <div>
+        <div class="chart-card-title">Top Senders</div>
+        <div class="chart-card-sub" id="sendersSub">By message count</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm btn-primary sender-mode-btn" data-mode="count" aria-pressed="true">Count</button>
+        <button class="btn btn-sm btn-secondary sender-mode-btn" data-mode="size" aria-pressed="false">Size</button>
+      </div>
+    </div>
+    <div class="chart-box" style="height:200px;overflow:hidden">
+      <canvas id="sendersChart" aria-label="Top senders by message count" role="img"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card ani" style="margin-bottom:0;min-width:0;overflow:hidden">
+    <div class="chart-card-hdr">
+      <div>
+        <div class="chart-card-title">Size by Label</div>
+        <div class="chart-card-sub">Mailbox storage per user label</div>
+      </div>
+    </div>
+    <div class="chart-box" style="height:200px;overflow:hidden">
+      <canvas id="labelSizeChart" aria-label="Size distribution by label" role="img"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card ani" style="margin-bottom:0;min-width:0;overflow:hidden">
+    <div class="chart-card-hdr">
+      <div>
+        <div class="chart-card-title">Messages by Age</div>
+        <div class="chart-card-sub">Distribution across calendar years</div>
+      </div>
+    </div>
+    <div class="chart-box" style="height:200px;overflow:hidden">
+      <canvas id="ageChart" aria-label="Messages by age bucket" role="img"></canvas>
+    </div>
+  </div>
+
+</div>
+
 <script>
 setInterval(() => {
   if (document.visibilityState === 'visible') window.location.reload();
 }, 30000);
+
+window.addEventListener('beforeunload', () => {
+  const days = document.querySelector('.days-btn.btn-primary')?.dataset.days || '30';
+  localStorage.setItem('chartDays', days);
+
+  const datasetStates = {};
+  document.querySelectorAll('.chart-legend input[data-dataset]').forEach(cb => {
+    datasetStates[cb.dataset.dataset] = cb.checked;
+  });
+  localStorage.setItem('chartDatasets', JSON.stringify(datasetStates));
+
+  const yAxisZero = document.getElementById('yAxisZero')?.checked ?? true;
+  localStorage.setItem('chartYAxisZero', yAxisZero);
+});
 </script>
 {% endblock %}
 
 {% block scripts %}
-{% if snapshots %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% if snapshots %}
 <script>
-fetch('/api/v1/progress').then(r=>r.json()).then(data=>{
-  if(!data.snapshots||!data.snapshots.length) return;
-  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+(function(){
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+    || (!document.documentElement.getAttribute('data-theme')
+        && window.matchMedia('(prefers-color-scheme: dark)').matches);
   const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(15,23,42,.06)';
-  const labelColor = isDark ? 'rgba(255,255,255,.4)' : '#8097b4';
+  const labelColor = isDark ? 'rgba(255,255,255,.5)' : '#374151';
   const ctx = document.getElementById('progressChart').getContext('2d');
+
+  const MB = 1024 * 1024;
 
   const chart = new Chart(ctx, {
     type: 'line',
-    data: {
-      labels: data.snapshots.map(s=>s.date),
-      datasets: [
-        {label:'Inbox',data:data.snapshots.map(s=>s.inbox_count),
-         borderColor:'#21cad2',backgroundColor:'rgba(33,202,210,.08)',
-         borderWidth:2,pointRadius:3,pointBackgroundColor:'#21cad2',tension:.4,fill:true},
-        {label:'Archive unlabelled',data:data.snapshots.map(s=>s.archive_unlabelled_count),
-         borderColor:'#8b5cf6',backgroundColor:'rgba(139,92,246,.08)',
-         borderWidth:2,pointRadius:3,pointBackgroundColor:'#8b5cf6',tension:.4,fill:true},
-        {label:'Sent unresolved',data:data.snapshots.map(s=>s.sent_unresolved_count),
-         borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,.08)',
-         borderWidth:2,pointRadius:3,pointBackgroundColor:'#f59e0b',tension:.4,fill:true},
-      ]
-    },
+    data: {labels:[], datasets:[
+      {label:'Inbox',data:[],yAxisID:'y',
+       borderColor:'#21cad2',backgroundColor:'rgba(33,202,210,.08)',
+       borderWidth:2,pointRadius:3,pointBackgroundColor:'#21cad2',tension:.4,fill:true},
+      {label:'Archive unlabelled',data:[],yAxisID:'y',
+       borderColor:'#8b5cf6',backgroundColor:'rgba(139,92,246,.08)',
+       borderWidth:2,pointRadius:3,pointBackgroundColor:'#8b5cf6',tension:.4,fill:true},
+      {label:'Sent unresolved',data:[],yAxisID:'y',
+       borderColor:'#f59e0b',backgroundColor:'rgba(245,158,11,.08)',
+       borderWidth:2,pointRadius:3,pointBackgroundColor:'#f59e0b',tension:.4,fill:true},
+      {label:'Mailbox size (MB)',data:[],yAxisID:'ySize',
+       borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.08)',
+       borderWidth:2,pointRadius:3,pointBackgroundColor:'#10b981',tension:.4,fill:false},
+      {label:'Label coverage %',data:[],yAxisID:'yCoverage',
+       borderColor:'#ec4899',backgroundColor:'rgba(236,72,153,.08)',
+       borderWidth:2,pointRadius:3,pointBackgroundColor:'#ec4899',tension:.4,fill:false},
+    ]},
     options:{
-      responsive:true,maintainAspectRatio:false,
+      responsive:true, maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{
         backgroundColor:isDark?'#1e2535':'#fff',
-        titleColor:isDark?'#e8edf5':'#0d1117',
-        bodyColor:isDark?'#8097b4':'#5a7090',
+        titleColor:isDark?'#e8edf5':'#111827',
+        bodyColor:isDark?'#8097b4':'#374151',
         borderColor:isDark?'rgba(255,255,255,.1)':'rgba(15,23,42,.1)',
-        borderWidth:1,padding:12,
+        borderWidth:1, padding:12,
+        callbacks:{
+          label: function(ctx){
+            if(ctx.dataset.label==='Mailbox size (MB)')
+              return ctx.dataset.label+': '+ctx.parsed.y.toFixed(1)+' MB';
+            if(ctx.dataset.label==='Label coverage %')
+              return ctx.dataset.label+': '+ctx.parsed.y.toFixed(1)+'%';
+            return ctx.dataset.label+': '+ctx.parsed.y;
+          }
+        }
       }},
       scales:{
         x:{grid:{color:gridColor},ticks:{color:labelColor,font:{size:11}}},
-        y:{beginAtZero:true,grid:{color:gridColor},ticks:{color:labelColor,font:{size:11}}}
+        y:{beginAtZero:true,position:'left',
+           grid:{color:gridColor},ticks:{color:labelColor,font:{size:11}}},
+        ySize:{beginAtZero:true,position:'right',
+               grid:{drawOnChartArea:false},
+               ticks:{color:'#10b981',font:{size:10},
+                      callback:v=>v.toFixed(0)+' MB'}},
+        yCoverage:{beginAtZero:true,min:0,max:100,position:'right',
+                   grid:{drawOnChartArea:false},
+                   ticks:{color:'#ec4899',font:{size:10},
+                          callback:v=>v+'%'},
+                   offset:true},
       }
     }
   });
 
-  document.getElementById('yAxisZero').addEventListener('change', function () {
-  chart.options.scales.y.beginAtZero = this.checked;
+  function loadChart(days){
+    fetch('/api/v1/progress?days='+days).then(r=>r.json()).then(data=>{
+      if(!data.snapshots||!data.snapshots.length) return;
+      chart.data.labels = data.snapshots.map(s=>s.date);
+      chart.data.datasets[0].data = data.snapshots.map(s=>s.inbox_count);
+      chart.data.datasets[1].data = data.snapshots.map(s=>s.archive_unlabelled_count);
+      chart.data.datasets[2].data = data.snapshots.map(s=>s.sent_unresolved_count);
+      chart.data.datasets[3].data = data.snapshots.map(s=>+(s.total_size_bytes/MB).toFixed(2));
+      chart.data.datasets[4].data = data.snapshots.map(s=>+s.custom_label_coverage_pct.toFixed(2));
+      document.getElementById('chartTitle').textContent = days+'-Day Progress';
+      chart.update();
+    }).catch(console.error);
+  }
 
-  // force scale recalculation
-  delete chart.options.scales.y.min;
-  delete chart.options.scales.y.max;
+  function restoreSettings(){
+    const savedDays = localStorage.getItem('chartDays') || '30';
+    const savedDatasets = JSON.parse(localStorage.getItem('chartDatasets') || '{}');
+    const savedYAxisZero = localStorage.getItem('chartYAxisZero') !== 'false';
 
-  chart.update();
-});
+    document.querySelectorAll('.days-btn').forEach(btn=>{
+      if(btn.dataset.days === savedDays){
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-primary');
+        btn.setAttribute('aria-pressed','true');
+      }else{
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-secondary');
+        btn.setAttribute('aria-pressed','false');
+      }
+    });
 
+    document.querySelectorAll('.chart-legend input[data-dataset]').forEach(cb=>{
+      const idx = cb.dataset.dataset;
+      cb.checked = savedDatasets[idx] !== false;
+      const datasetIdx = parseInt(idx);
+      chart.data.datasets[datasetIdx].hidden = !cb.checked;
+    });
 
-  // Toggle datasets
-  document.querySelectorAll('.chart-legend input[type="checkbox"]').forEach(cb=>{
-    cb.addEventListener('change', e=>{
-      const datasetIndex = parseInt(e.target.dataset.dataset);
-      chart.data.datasets[datasetIndex].hidden = !e.target.checked;
-      chart.update(); // Auto-rescales Y-axis for visible datasets
+    const yAxisCheckbox = document.getElementById('yAxisZero');
+    yAxisCheckbox.checked = savedYAxisZero;
+    chart.options.scales.y.beginAtZero = savedYAxisZero;
+    chart.options.scales.ySize.beginAtZero = savedYAxisZero;
+    chart.options.scales.yCoverage.beginAtZero = savedYAxisZero;
+    if(!savedYAxisZero){
+      delete chart.options.scales.y.min;
+      delete chart.options.scales.y.max;
+    }
+
+    return parseInt(savedDays);
+  }
+
+  const initialDays = restoreSettings();
+  loadChart(initialDays);
+
+  document.querySelectorAll('.days-btn').forEach(btn=>{
+    btn.addEventListener('click', function(){
+      document.querySelectorAll('.days-btn').forEach(b=>{
+        b.classList.remove('btn-primary');
+        b.classList.add('btn-secondary');
+        b.setAttribute('aria-pressed','false');
+      });
+      this.classList.remove('btn-secondary');
+      this.classList.add('btn-primary');
+      this.setAttribute('aria-pressed','true');
+      loadChart(parseInt(this.dataset.days));
     });
   });
 
-}).catch(console.error);
+  document.getElementById('yAxisZero').addEventListener('change', function(){
+    chart.options.scales.y.beginAtZero = this.checked;
+    chart.options.scales.ySize.beginAtZero = this.checked;
+    chart.options.scales.yCoverage.beginAtZero = this.checked;
+    delete chart.options.scales.y.min;
+    delete chart.options.scales.y.max;
+    chart.update();
+  });
+
+  document.querySelectorAll('.chart-legend input[data-dataset]').forEach(cb=>{
+    cb.addEventListener('change', e=>{
+      const idx = parseInt(e.target.dataset.dataset);
+      chart.data.datasets[idx].hidden = !e.target.checked;
+      chart.update();
+    });
+  });
+})();
 </script>
 {% endif %}
+
+{# ── Storage Breakdown Charts JS ─────────────────────────────────────────── #}
+<script>
+(function(){
+  // Match the app's theme system: data-theme attribute takes priority over OS preference
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+    || (!document.documentElement.getAttribute('data-theme')
+        && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(15,23,42,.06)';
+  const labelColor = isDark ? 'rgba(255,255,255,.5)' : '#374151';
+  const MB = 1024 * 1024;
+
+  const DOUGHNUT_COLORS = [
+    '#21cad2','#8b5cf6','#f59e0b','#10b981','#ec4899',
+    '#3b82f6','#ef4444','#a16207','#6366f1','#14b8a6'
+  ];
+
+  const ttBase = {
+    backgroundColor: isDark ? '#1e2535' : '#fff',
+    titleColor: isDark ? '#e8edf5' : '#111827',
+    bodyColor: isDark ? '#8097b4' : '#374151',
+    borderColor: isDark ? 'rgba(255,255,255,.1)' : 'rgba(15,23,42,.1)',
+    borderWidth: 1, padding: 12
+  };
+
+  // ── Senders chart ─────────────────────────────────────────────────────────
+  const sendersCtx = document.getElementById('sendersChart').getContext('2d');
+  const sendersChart = new Chart(sendersCtx, {
+    type: 'bar',
+    data: {labels: [], datasets: [{
+      label: 'Messages', data: [],
+      backgroundColor: 'rgba(33,202,210,.7)', borderColor: '#21cad2', borderWidth: 1
+    }]},
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {legend: {display: false}, tooltip: {...ttBase}},
+      scales: {
+        x: {grid: {color: gridColor}, ticks: {color: labelColor, font: {size: 10}}},
+        y: {grid: {display: false}, ticks: {color: labelColor, font: {size: 10}}}
+      }
+    }
+  });
+
+  // ── Label size doughnut ───────────────────────────────────────────────────
+  const labelCtx = document.getElementById('labelSizeChart').getContext('2d');
+  const labelChart = new Chart(labelCtx, {
+    type: 'doughnut',
+    data: {labels: [], datasets: [{data: [], backgroundColor: DOUGHNUT_COLORS}]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: {color: labelColor, font: {size: 9}, boxWidth: 8, padding: 6}
+        },
+        tooltip: {...ttBase, callbacks: {
+          label: ctx => ' ' + ctx.label + ': ' + (ctx.parsed / MB).toFixed(1) + ' MB'
+        }}
+      }
+    }
+  });
+
+  // ── Age bucket bar chart ──────────────────────────────────────────────────
+  const ageCtx = document.getElementById('ageChart').getContext('2d');
+  const ageChart = new Chart(ageCtx, {
+    type: 'bar',
+    data: {labels: [], datasets: [{
+      label: 'Messages', data: [],
+      backgroundColor: ['rgba(139,92,246,.7)','rgba(245,158,11,.7)','rgba(100,116,139,.5)'],
+      borderColor: ['#8b5cf6','#f59e0b','#64748b'],
+      borderWidth: 1
+    }]},
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {legend: {display: false}, tooltip: {...ttBase}},
+      scales: {
+        x: {grid: {display: false}, ticks: {color: labelColor, font: {size: 10}}},
+        y: {beginAtZero: true, grid: {color: gridColor}, ticks: {color: labelColor, font: {size: 10}}}
+      }
+    }
+  });
+
+  // ── Fetch and populate ────────────────────────────────────────────────────
+  let _breakdownData = null;
+  let _senderMode = 'count';
+
+  function renderSenders(mode) {
+    if (!_breakdownData) return;
+    const list = mode === 'size'
+      ? _breakdownData.top_senders_by_size
+      : _breakdownData.top_senders_by_count;
+    const reversed = [...list].reverse();
+    sendersChart.data.labels = reversed.map(s => s.sender_domain || s.sender);
+    if (mode === 'size') {
+      sendersChart.data.datasets[0].label = 'Size (MB)';
+      sendersChart.data.datasets[0].data = reversed.map(s => +(s.total_size_bytes / MB).toFixed(2));
+      document.getElementById('sendersSub').textContent = 'By total size';
+      sendersChart.options.scales.x.ticks.callback = v => v.toFixed(1) + ' MB';
+    } else {
+      sendersChart.data.datasets[0].label = 'Messages';
+      sendersChart.data.datasets[0].data = reversed.map(s => s.message_count);
+      document.getElementById('sendersSub').textContent = 'By message count';
+      sendersChart.options.scales.x.ticks.callback = undefined;
+    }
+    sendersChart.update();
+  }
+
+  fetch('/api/v1/storage-breakdown')
+    .then(r => r.json())
+    .then(data => {
+      _breakdownData = data;
+
+      renderSenders('count');
+
+      if (data.size_by_label && data.size_by_label.length) {
+        labelChart.data.labels = data.size_by_label.map(l => l.label_name);
+        labelChart.data.datasets[0].data = data.size_by_label.map(l => l.total_size_bytes);
+        labelChart.update();
+      }
+
+      const ab = data.age_buckets;
+      ageChart.data.labels = [ab.current_year_label, ab.past_year_label, ab.older_label];
+      ageChart.data.datasets[0].data = [ab.current_year, ab.past_year, ab.older];
+      ageChart.update();
+    })
+    .catch(console.error);
+
+  document.querySelectorAll('.sender-mode-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      _senderMode = this.dataset.mode;
+      document.querySelectorAll('.sender-mode-btn').forEach(b => {
+        b.classList.toggle('btn-primary', b.dataset.mode === _senderMode);
+        b.classList.toggle('btn-secondary', b.dataset.mode !== _senderMode);
+        b.setAttribute('aria-pressed', String(b.dataset.mode === _senderMode));
+      });
+      renderSenders(_senderMode);
+    });
+  });
+})();
+</script>
 {% endblock %}

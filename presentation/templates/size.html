@@ -15,31 +15,113 @@
   </div>
 </div>
 
+{{ render_page_info(page_info) }}
+
 {% if messages %}
+<form method="post" action="{{ url_for('main.apply_label') }}">
+<input type="hidden" name="next" value="{{ request.full_path }}">
 <div class="table-card ani">
   <div class="table-card-hdr">
     <span class="table-card-title">
       Largest messages
       <span class="chip chip-neutral">{{ total_size_bytes | format_size }} total</span>
     </span>
-    <div style="display:flex;gap:10px;font-size:.73rem;color:var(--text-muted)">
-      <span><span style="display:inline-block;width:10px;height:10px;background:rgba(245,158,11,.4);border-radius:2px;margin-right:4px"></span>&gt;5 MB</span>
-      <span><span style="display:inline-block;width:10px;height:10px;background:rgba(239,68,68,.4);border-radius:2px;margin-right:4px"></span>&gt;15 MB</span>
+    <div class="label-actionbar">
+      <div style="display:flex;gap:10px;align-items:center;font-size:.73rem;color:var(--text-muted)">
+        <span><span style="display:inline-block;width:10px;height:10px;background:rgba(245,158,11,.4);border-radius:2px;margin-right:4px"></span>&gt;5 MB</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:rgba(239,68,68,.4);border-radius:2px;margin-right:4px"></span>&gt;15 MB</span>
+      </div>
+      <a href="{{ url_for('main.size', sort=sort_by, dir=sort_dir) if show_workflow_labels else url_for('main.size', sort=sort_by, dir=sort_dir, show_workflow_labels='1') }}" class="btn btn-ghost btn-sm">
+        {{ 'Hide' if show_workflow_labels else 'Show' }} To-Archive/To-Remove labels
+      </a>
+      <a href="{{ request.path }}?sort={{ sort_by }}&dir={{ sort_dir }}{% if not group_by %}&group=1{% endif %}{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}" class="btn btn-ghost btn-sm">
+        {{ 'Ungroup' if group_by else 'Group by domain' }}
+      </a>
+      <select class="form-select form-select-sm" name="label_id" aria-label="Label to apply">
+        <option value="">Choose label</option>
+        {% for lbl in user_labels | sort(attribute='name') %}
+        <option value="{{ lbl.id }}">{{ lbl.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-primary btn-sm">Apply</button>
     </div>
   </div>
+  {% if group_by %}
+  {% for domain, domain_msgs in grouped_by_domain.items() %}
+  <div class="domain-section ani">
+    <div class="domain-hdr">
+      <span class="domain-name">{{ domain }}</span>
+      <span class="domain-count">{{ domain_msgs | length }}</span>
+    </div>
+    <div class="domain-body">
+      <table class="dtable">
+        <thead>
+          <tr>
+            <th style="width:40px"><input type="checkbox" aria-label="Select all from {{ domain }}"></th>
+            <th>From</th>
+            <th><a href="{{ request.path }}?sort=subject&dir={{ 'asc' if sort_by == 'subject' and sort_dir == 'desc' else 'desc' }}&group=1{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">Subject {% if sort_by == 'subject' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+            <th>Location</th>
+            <th><a href="{{ request.path }}?sort=internal_date&dir={{ 'asc' if sort_by == 'internal_date' and sort_dir == 'desc' else 'desc' }}&group=1{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">Age {% if sort_by == 'internal_date' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+            <th style="text-align:right"><a href="{{ request.path }}?sort=size_estimate&dir={{ 'asc' if sort_by == 'size_estimate' and sort_dir == 'desc' else 'desc' }}&group=1{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">Size {% if sort_by == 'size_estimate' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+            <th>Labels</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for msg in domain_msgs %}
+          {% set is_xl = msg.size_estimate >= 15*1024*1024 %}
+          {% set is_lg = msg.size_estimate >= 5*1024*1024 and not is_xl %}
+          {% if not show_workflow_labels and msg.id in workflow_labeled_message_ids %}
+          {% else %}
+          <tr class="{{ 'row-very-large' if is_xl else 'row-large' if is_lg else '' }}" data-msg-id="{{ msg.id }}">
+            <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
+            <td><span class="cell-sender" title="{{ msg.sender }}">{{ msg.sender_domain }}</span></td>
+            <td>
+              <span class="cell-subject">{{ msg.subject or '(no subject)' }}</span>
+              {% if msg.snippet %}<span class="cell-snippet">{{ msg.snippet }}</span>{% endif %}
+            </td>
+            <td>
+              {% if msg.is_inbox %}<span class="loc-pill loc-inbox">Inbox</span>
+              {% elif msg.is_sent %}<span class="loc-pill loc-sent">Sent</span>
+              {% else %}<span class="loc-pill loc-archive">Archive</span>{% endif %}
+            </td>
+            <td><span class="cell-date">{{ msg.age_days | age_label }} ago</span></td>
+            <td><span class="cell-size {{ 'cell-size-xl' if is_xl else 'cell-size-lg' if is_lg else '' }}">{{ msg.size_estimate | format_size }}</span></td>
+            <td>
+              {% for lid in msg.label_ids %}
+                {% if lid not in ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED','IMPORTANT','UNREAD'] and not lid.startswith('CATEGORY_') %}
+                <span class="chip chip-neutral">{{ labels_by_id.get(lid, lid) }}</span>
+                {% endif %}
+              {% endfor %}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
   <div class="tbl-wrap">
     <table class="dtable">
       <thead>
         <tr>
           <th style="width:40px"><input type="checkbox" id="sel-all" aria-label="Select all"></th>
-          <th>From</th><th>Subject</th><th>Location</th><th>Age</th><th style="text-align:right">Size</th><th>Labels</th>
+          <th><a href="{{ request.path }}?sort=sender_domain&dir={{ 'asc' if sort_by == 'sender_domain' and sort_dir == 'desc' else 'desc' }}">From {% if sort_by == 'sender_domain' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+          <th><a href="{{ request.path }}?sort=subject&dir={{ 'asc' if sort_by == 'subject' and sort_dir == 'desc' else 'desc' }}">Subject {% if sort_by == 'subject' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+          <th>Location</th>
+          <th><a href="{{ request.path }}?sort=internal_date&dir={{ 'asc' if sort_by == 'internal_date' and sort_dir == 'desc' else 'desc' }}">Age {% if sort_by == 'internal_date' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+          <th style="text-align:right"><a href="{{ request.path }}?sort=size_estimate&dir={{ 'asc' if sort_by == 'size_estimate' and sort_dir == 'desc' else 'desc' }}">Size {% if sort_by == 'size_estimate' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+          <th>Labels</th>
         </tr>
       </thead>
       <tbody>
         {% for msg in messages %}
         {% set is_xl = msg.size_estimate >= 15*1024*1024 %}
         {% set is_lg = msg.size_estimate >= 5*1024*1024 and not is_xl %}
-        <tr class="{{ 'row-very-large' if is_xl else 'row-large' if is_lg else '' }}">
+        {% if not show_workflow_labels and msg.id in workflow_labeled_message_ids %}
+        {% else %}
+        <tr class="{{ 'row-very-large' if is_xl else 'row-large' if is_lg else '' }}" data-msg-id="{{ msg.id }}">
           <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
           <td><span class="cell-sender" title="{{ msg.sender }}">{{ msg.sender_domain }}</span></td>
           <td>
@@ -58,16 +140,19 @@
           <td>
             {% for lid in msg.label_ids %}
               {% if lid not in ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED','IMPORTANT','UNREAD'] and not lid.startswith('CATEGORY_') %}
-              <span class="chip chip-neutral">{{ lid.split('/')[-1] }}</span>
+              <span class="chip chip-neutral">{{ labels_by_id.get(lid, lid) }}</span>
               {% endif %}
             {% endfor %}
           </td>
         </tr>
+        {% endif %}
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% endif %}
 </div>
+</form>
 {% else %}
 <div class="empty ani">
   <div class="empty-icon">📭</div>

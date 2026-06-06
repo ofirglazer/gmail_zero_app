@@ -12,22 +12,42 @@ Design note:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from application.dto.analytics import DashboardSummary
 from infrastructure.persistence.repositories.message_repository import MessageFilter
 
 if TYPE_CHECKING:
+    from config.settings import Settings
     from domain.models.daily_snapshot import DailySnapshot
     from domain.models.thread import Thread
-    from config.settings import Settings
     from infrastructure.persistence.repositories.label_repository import LabelRepository
     from infrastructure.persistence.repositories.message_repository import (
+        AgeBuckets,
+        LabelSizeStats,
         MessageRepository,
         SenderStats,
     )
     from infrastructure.persistence.repositories.snapshot_repository import SnapshotRepository
     from infrastructure.persistence.repositories.sync_state_repository import SyncStateRepository
+
+
+@dataclass(frozen=True)
+class StorageBreakdown:
+    """Assembled data for the three storage breakdown charts on the dashboard.
+
+    Attributes:
+        top_senders_by_count: Top senders ranked by message count.
+        top_senders_by_size:  Top senders ranked by total bytes.
+        size_by_label:        User labels ranked by total attached message size.
+        age_buckets:          Message counts split by calendar-year age band.
+    """
+
+    top_senders_by_count: list[SenderStats]
+    top_senders_by_size: list[SenderStats]
+    size_by_label: list[LabelSizeStats]
+    age_buckets: AgeBuckets
 
 
 class AnalyticsService:
@@ -150,6 +170,29 @@ class AnalyticsService:
             order).
         """
         return self._snap_repo.list_recent(days=days)
+
+    def storage_breakdown(self, *, sender_limit: int = 5) -> StorageBreakdown:
+        """Assemble all data needed for the three storage breakdown charts.
+
+        Combines top-sender analytics, label size distribution, and age-bucket
+        counts into a single frozen DTO for the dashboard.
+
+        Args:
+            sender_limit: Number of senders to include in each sender list.
+
+        Returns:
+            StorageBreakdown DTO with all chart data pre-computed.
+        """
+        return StorageBreakdown(
+            top_senders_by_count=self._msg_repo.top_senders_by_count(
+                limit=sender_limit
+            ),
+            top_senders_by_size=self._msg_repo.top_senders_by_size(
+                limit=sender_limit
+            ),
+            size_by_label=self._msg_repo.size_by_label(limit=10),
+            age_buckets=self._msg_repo.messages_by_age_bucket(),
+        )
 
     # ── Thread analytics ──────────────────────────────────────────────────────
 

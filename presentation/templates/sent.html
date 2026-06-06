@@ -15,6 +15,8 @@
   </div>
 </div>
 
+{{ render_page_info(page_info) }}
+
 {% if messages %}
 <form method="post" action="{{ url_for('main.apply_label') }}">
 <input type="hidden" name="next" value="{{ request.full_path }}">
@@ -22,26 +24,89 @@
   <div class="table-card-hdr">
     <span class="table-card-title">Sent messages <span class="chip chip-amber">{{ total_count }} unresolved</span></span>
     <div class="label-actionbar">
+      <a href="{{ url_for('main.sent', sort=sort_by, dir=sort_dir) if show_workflow_labels else url_for('main.sent', sort=sort_by, dir=sort_dir, show_workflow_labels='1') }}" class="btn btn-ghost btn-sm" style="margin-right:10px">
+        {{ 'Hide' if show_workflow_labels else 'Show' }} To-Archive/To-Remove labels
+      </a>
+      <a href="{{ request.path }}?sort={{ sort_by }}&dir={{ sort_dir }}{% if not group_by %}&group=1{% endif %}{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}" class="btn btn-ghost btn-sm" style="margin-right:10px">
+        {{ 'Ungroup' if group_by else 'Group by domain' }}
+      </a>
       <select class="form-select form-select-sm" name="label_id" aria-label="Label to apply">
         <option value="">Choose label</option>
-        {% for lbl in user_labels %}
+        {% for lbl in user_labels | sort(attribute='name') %}
         <option value="{{ lbl.id }}">{{ lbl.name }}</option>
         {% endfor %}
       </select>
       <button type="submit" class="btn btn-primary btn-sm">Apply</button>
     </div>
   </div>
+  {% if group_by %}
+  {% for domain, domain_msgs in grouped_by_domain.items() %}
+  <div class="domain-section ani">
+    <div class="domain-hdr">
+      <span class="domain-name">{{ domain }}</span>
+      <span class="domain-count">{{ domain_msgs | length }}</span>
+    </div>
+    <div class="domain-body">
+      <table class="dtable">
+        <thead>
+          <tr>
+            <th style="width:40px"><input type="checkbox" aria-label="Select all from {{ domain }}"></th>
+            <th>To</th>
+            <th><a href="{{ request.path }}?sort=subject&dir={{ 'asc' if sort_by == 'subject' and sort_dir == 'desc' else 'desc' }}&group=1{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">Subject {% if sort_by == 'subject' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+            <th><a href="{{ request.path }}?sort=internal_date&dir={{ 'asc' if sort_by == 'internal_date' and sort_dir == 'desc' else 'desc' }}&group=1{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">Age {% if sort_by == 'internal_date' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+            <th><a href="{{ request.path }}?sort=size_estimate&dir={{ 'asc' if sort_by == 'size_estimate' and sort_dir == 'desc' else 'desc' }}&group=1{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">Size {% if sort_by == 'size_estimate' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+            <th>Labels</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for msg in domain_msgs %}
+          {% if not show_workflow_labels and msg.id in workflow_labeled_message_ids %}
+          {% else %}
+          <tr data-msg-id="{{ msg.id }}">
+            <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
+            <td><span class="cell-sender" title="{{ msg.recipient or '' }}">{{ msg.recipient or '(unknown)' }}</span></td>
+            <td>
+              <span class="cell-subject">{{ msg.subject or '(no subject)' }}</span>
+              {% if msg.snippet %}<span class="cell-snippet">{{ msg.snippet }}</span>{% endif %}
+            </td>
+            <td><span class="cell-date">{{ msg.age_days | age_label }} ago</span></td>
+            <td><span class="cell-size">{{ msg.size_estimate | format_size }}</span></td>
+            <td>
+              {% set shown = namespace(any=false) %}
+              {% for lid in msg.label_ids %}
+                {% if lid not in ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED','IMPORTANT','UNREAD'] and not lid.startswith('CATEGORY_') %}
+                <span class="chip chip-violet">{{ labels_by_id.get(lid, lid) }}</span>
+                {% set shown.any = true %}
+                {% endif %}
+              {% endfor %}
+              {% if not shown.any %}<span class="chip chip-missing">unlabelled</span>{% endif %}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
   <div class="tbl-wrap">
     <table class="dtable">
       <thead>
         <tr>
           <th style="width:40px"><input type="checkbox" id="sel-all" aria-label="Select all"></th>
-          <th>To</th><th>Subject</th><th>Age</th><th>Size</th><th>Labels</th>
+          <th><a href="{{ request.path }}?sort=recipient&dir={{ 'asc' if sort_by == 'recipient' and sort_dir == 'desc' else 'desc' }}">To {% if sort_by == 'recipient' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+          <th><a href="{{ request.path }}?sort=subject&dir={{ 'asc' if sort_by == 'subject' and sort_dir == 'desc' else 'desc' }}">Subject {% if sort_by == 'subject' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+          <th><a href="{{ request.path }}?sort=internal_date&dir={{ 'asc' if sort_by == 'internal_date' and sort_dir == 'desc' else 'desc' }}">Age {% if sort_by == 'internal_date' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+          <th><a href="{{ request.path }}?sort=size_estimate&dir={{ 'asc' if sort_by == 'size_estimate' and sort_dir == 'desc' else 'desc' }}">Size {% if sort_by == 'size_estimate' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+          <th>Labels</th>
         </tr>
       </thead>
       <tbody>
         {% for msg in messages %}
-        <tr>
+        {% if not show_workflow_labels and msg.id in workflow_labeled_message_ids %}
+        {% else %}
+        <tr data-msg-id="{{ msg.id }}">
           <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
           <td><span class="cell-sender" title="{{ msg.recipient or '' }}">{{ msg.recipient or '(unknown)' }}</span></td>
           <td>
@@ -56,17 +121,19 @@
             {% set shown = namespace(any=false) %}
             {% for lid in msg.label_ids %}
               {% if lid not in ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED','IMPORTANT','UNREAD'] and not lid.startswith('CATEGORY_') %}
-              <span class="chip chip-violet">{{ lid.split('/')[-1] }}</span>
+              <span class="chip chip-violet">{{ labels_by_id.get(lid, lid) }}</span>
               {% set shown.any = true %}
               {% endif %}
             {% endfor %}
             {% if not shown.any %}<span class="chip chip-missing">unlabelled</span>{% endif %}
           </td>
         </tr>
+        {% endif %}
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% endif %}
 </div>
 </form>
 {% else %}

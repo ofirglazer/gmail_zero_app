@@ -13,12 +13,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-from infrastructure.persistence.models import MessageLabelORM, MessageORM
+from infrastructure.persistence.models import LabelORM, MessageLabelORM, MessageORM
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -34,6 +34,42 @@ class SenderStats:
     sender_domain: str
     message_count: int
     total_size_bytes: int
+
+
+@dataclass(frozen=True)
+class LabelSizeStats:
+    """Aggregated size statistics for a single label, used in storage charts.
+
+    Attributes:
+        label_name:        Display name of the user label.
+        total_size_bytes:  Sum of size_estimate for all messages carrying this label.
+        message_count:     Number of messages carrying this label.
+    """
+
+    label_name: str
+    total_size_bytes: int
+    message_count: int
+
+
+@dataclass(frozen=True)
+class AgeBuckets:
+    """Message count distribution across three age categories.
+
+    Attributes:
+        current_year:       Count of messages dated in the current calendar year.
+        current_year_label: Display string for the current year (e.g. "2026").
+        past_year:          Count of messages dated in the previous calendar year.
+        past_year_label:    Display string for the past year (e.g. "2025").
+        older:              Count of messages dated before the previous calendar year.
+        older_label:        Display string for the older bucket (e.g. "2024 & older").
+    """
+
+    current_year: int
+    current_year_label: str
+    past_year: int
+    past_year_label: str
+    older: int
+    older_label: str
 
 
 @dataclass(frozen=True)
@@ -87,7 +123,7 @@ class MessageRepository:
         sort_dir: str,
         default_sort_by: str,
         default_sort_dir: str,
-    ) -> list:
+    ) -> list[Any]:
         column_map = {
             "internal_date": MessageORM.internal_date,
             "sender": MessageORM.sender,
@@ -357,6 +393,68 @@ class MessageRepository:
         )
         return self._session.execute(stmt).scalar_one()
 
+    # ── Label membership via denormalised raw_label_ids ───────────────────────
+    #
+    # These helpers resolve label membership from the ``raw_label_ids`` JSON
+    # column rather than the ``message_labels`` junction.  They are immune to a
+    # stale or unpopulated junction, which matters for views that must be
+    # correct immediately after a sync.  Matching is exact: each label ID is
+    # stored quoted (e.g. ``"Label_123"``) and Gmail IDs never contain a double
+    # quote, so a quoted-substring LIKE cannot produce false positives.
+
+    @staticmethod
+    def _raw_label_pattern(label_id: str) -> str:
+        """Return a SQL LIKE pattern matching ``label_id`` inside raw_label_ids."""
+        return f'%"{label_id}"%'
+
+    def list_by_raw_label(
+        self,
+        label_id: str,
+        *,
+        is_archived: bool | None = None,
+        limit: int = 200,
+    ) -> list[Message]:
+        """Return messages whose ``raw_label_ids`` contains ``label_id``.
+
+        Args:
+            label_id:    Gmail label ID to match.
+            is_archived: If set, additionally constrain on archive state.
+            limit:       Maximum number of messages to return.
+
+        Returns:
+            List of matching domain Message entities.
+        """
+        stmt = select(MessageORM).where(
+            MessageORM.raw_label_ids.like(self._raw_label_pattern(label_id))
+        )
+        if is_archived is not None:
+            stmt = stmt.where(MessageORM.is_archived.is_(is_archived))
+        stmt = stmt.limit(limit)
+        rows = self._session.execute(stmt).scalars().all()
+        return [r.to_domain() for r in rows]
+
+    def count_by_raw_label(
+        self,
+        label_id: str,
+        *,
+        is_archived: bool | None = None,
+    ) -> int:
+        """Return the count of messages whose ``raw_label_ids`` has ``label_id``.
+
+        Args:
+            label_id:    Gmail label ID to match.
+            is_archived: If set, additionally constrain on archive state.
+
+        Returns:
+            Integer count of matching messages.
+        """
+        stmt = select(func.count()).where(
+            MessageORM.raw_label_ids.like(self._raw_label_pattern(label_id))
+        )
+        if is_archived is not None:
+            stmt = stmt.where(MessageORM.is_archived.is_(is_archived))
+        return self._session.execute(stmt).scalar_one()
+
     # ── Sent / outbox workflow ────────────────────────────────────────────────
 
     def list_sent(
@@ -531,6 +629,81 @@ class MessageRepository:
             for r in rows
         ]
 
+    def size_by_label(self, *, limit: int = 10) -> list[LabelSizeStats]:
+        """Return top user labels ranked by total attached message size.
+
+        Each message is counted once per label it carries.  A message with
+        two user labels contributes its size to both slices — useful for
+        answering "which labels hold the most data?"
+
+        Args:
+            limit: Maximum number of labels to return.
+
+        Returns:
+            List of LabelSizeStats, largest total bytes first.
+        """
+        stmt = (
+            select(
+                LabelORM.name,
+                func.coalesce(func.sum(MessageORM.size_estimate), 0).label(
+                    "total_size_bytes"
+                ),
+                func.count().label("message_count"),
+            )
+            .select_from(LabelORM)
+            .join(MessageLabelORM, LabelORM.id == MessageLabelORM.label_id)
+            .join(MessageORM, MessageORM.id == MessageLabelORM.message_id)
+            .where(LabelORM.type == "user")
+            .group_by(LabelORM.id, LabelORM.name)
+            .order_by(func.sum(MessageORM.size_estimate).desc())
+            .limit(limit)
+        )
+        rows = self._session.execute(stmt).all()
+        return [
+            LabelSizeStats(
+                label_name=r.name,
+                total_size_bytes=r.total_size_bytes,
+                message_count=r.message_count,
+            )
+            for r in rows
+        ]
+
+    def messages_by_age_bucket(self) -> AgeBuckets:
+        """Return message counts split across current year, past year, and older.
+
+        Buckets are determined by calendar year of the message's internal_date
+        (UTC).  No messages are double-counted — the three buckets are mutually
+        exclusive and exhaustive.
+
+        Returns:
+            AgeBuckets with per-bucket counts and display labels.
+        """
+        now = datetime.now(tz=UTC)
+        jan_current = datetime(now.year, 1, 1, tzinfo=UTC)
+        jan_prev = datetime(now.year - 1, 1, 1, tzinfo=UTC)
+
+        current: int = self._session.execute(
+            select(func.count()).where(MessageORM.internal_date >= jan_current)
+        ).scalar_one()
+        past: int = self._session.execute(
+            select(func.count()).where(
+                MessageORM.internal_date >= jan_prev,
+                MessageORM.internal_date < jan_current,
+            )
+        ).scalar_one()
+        older: int = self._session.execute(
+            select(func.count()).where(MessageORM.internal_date < jan_prev)
+        ).scalar_one()
+
+        return AgeBuckets(
+            current_year=current,
+            current_year_label=str(now.year),
+            past_year=past,
+            past_year_label=str(now.year - 1),
+            older=older,
+            older_label=f"{now.year - 2} & older",
+        )
+
     def custom_label_coverage_pct(self) -> float:
         """
         Return the percentage of all messages that have at least one custom label.
@@ -656,3 +829,55 @@ class MessageRepository:
             ).where(MessageLabelORM.label_id == filters.label_id)
 
         return self._session.execute(stmt).scalar_one()
+
+    def list_search(self, filters: MessageFilter) -> list[Message]:
+        """Return messages matching the given filters (without pagination).
+
+        Applies the same filtering logic as count_search but returns the
+        full message entities instead of just counting them.
+        """
+        stmt = select(MessageORM)
+
+        if filters.sender is not None:
+            stmt = stmt.where(MessageORM.sender.ilike(f"%{filters.sender}%"))
+        if filters.sender_domain is not None:
+            stmt = stmt.where(
+                MessageORM.sender_domain.ilike(f"%{filters.sender_domain}%")
+            )
+        if filters.subject_contains is not None:
+            stmt = stmt.where(
+                MessageORM.subject.ilike(f"%{filters.subject_contains}%")
+            )
+        if filters.date_from is not None:
+            stmt = stmt.where(MessageORM.internal_date >= filters.date_from)
+        if filters.date_to is not None:
+            stmt = stmt.where(MessageORM.internal_date <= filters.date_to)
+        if filters.min_size_bytes is not None:
+            stmt = stmt.where(MessageORM.size_estimate >= filters.min_size_bytes)
+        if filters.max_size_bytes is not None:
+            stmt = stmt.where(MessageORM.size_estimate <= filters.max_size_bytes)
+        if filters.is_unread is not None:
+            stmt = stmt.where(MessageORM.is_unread.is_(filters.is_unread))
+        if filters.is_inbox is not None:
+            stmt = stmt.where(MessageORM.is_inbox.is_(filters.is_inbox))
+        if filters.is_sent is not None:
+            stmt = stmt.where(MessageORM.is_sent.is_(filters.is_sent))
+        if filters.is_archived is not None:
+            stmt = stmt.where(MessageORM.is_archived.is_(filters.is_archived))
+        if filters.has_custom_label is not None:
+            stmt = stmt.where(
+                MessageORM.has_custom_label.is_(filters.has_custom_label)
+            )
+        if filters.label_id is not None:
+            stmt = stmt.join(
+                MessageLabelORM,
+                MessageORM.id == MessageLabelORM.message_id,
+            ).where(MessageLabelORM.label_id == filters.label_id)
+
+        if filters.limit is not None:
+            stmt = stmt.limit(filters.limit)
+        if filters.offset is not None:
+            stmt = stmt.offset(filters.offset)
+
+        rows = self._session.execute(stmt).scalars().all()
+        return [r.to_domain() for r in rows]
