@@ -17,14 +17,19 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 
-from application.dto.label_operation import LabelToggleRequest
+from application.dto.label_operation import BulkLabelOperationRequest, LabelToggleRequest
+from domain.models.label import Label, LabelListVisibility, LabelType, MessageListVisibility
 from infrastructure.persistence.repositories.message_repository import MessageFilter
+from presentation.page_descriptions import get_page_description
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from werkzeug.wrappers import Response
 
     from domain.models import Message
@@ -35,6 +40,18 @@ main_bp = Blueprint("main", __name__)
 _DEFAULT_PER_PAGE = 50
 
 _WORKFLOW_LABEL_SUFFIXES = {"To-Archive", "To-Remove"}
+
+# Python-side sort keys for the archive view.  The unlabelled query is ordered
+# in SQL, but workflow-labelled messages are merged in afterwards, so the
+# combined list must be re-sorted on the same key to keep each domain group in
+# a consistent order.
+_ARCHIVE_SORT_KEYS: dict[str, Callable[[Message], str | int | datetime]] = {
+    "sender_domain": lambda m: (m.sender_domain or "").lower(),
+    "sender": lambda m: (m.sender or "").lower(),
+    "subject": lambda m: (m.subject or "").lower(),
+    "internal_date": lambda m: m.internal_date,
+    "size_estimate": lambda m: m.size_estimate,
+}
 
 
 def _parse_sort_params(
@@ -54,6 +71,37 @@ def _parse_sort_params(
 
 def _show_workflow_labels() -> bool:
     return request.args.get("show_workflow_labels", "").strip() in {"1", "true", "yes"}
+
+
+def _parse_group_param(*, default: bool = False) -> bool:
+    """Parse ?group=1/0 URL param; fall back to default when absent."""
+    val = request.args.get("group", "").strip()
+    if val == "1":
+        return True
+    if val == "0":
+        return False
+    return default
+
+
+def _group_messages_by_domain(messages: list[Message]) -> dict[str, list[Message]]:
+    """Group messages by sender_domain, sorted alphabetically."""
+    grouped: dict[str, list[Message]] = defaultdict(list)
+    for msg in messages:
+        grouped[msg.sender_domain].append(msg)
+    return dict(sorted(grouped.items(), key=lambda item: item[0].lower()))
+
+
+def _group_sent_by_recipient_domain(messages: list[Message]) -> dict[str, list[Message]]:
+    """Group sent messages by recipient domain, sorted alphabetically."""
+    grouped: dict[str, list[Message]] = defaultdict(list)
+    for msg in messages:
+        recipient = msg.recipient or ""
+        if "@" in recipient:
+            domain = recipient.split("@")[-1].rstrip(">").strip()
+        else:
+            domain = recipient or "(unknown)"
+        grouped[domain].append(msg)
+    return dict(sorted(grouped.items(), key=lambda item: item[0].lower()))
 
 
 # ## Root redirect ##
@@ -87,6 +135,7 @@ def dashboard() -> str:
         summary=summary,
         snapshots=snapshots,
         last_sync=last_sync,
+        page_info=get_page_description("dashboard"),
     )
 
 
@@ -111,6 +160,30 @@ def apply_label() -> Response:
     updated = g.label_svc.toggle_label_operation(request_dto)
     flash(f"Applied label to {len(updated)} message(s).", "success")
     return redirect(next_url)
+
+
+@main_bp.route("/archive/remove-to-archive", methods=["POST"])
+def remove_to_archive_label() -> Response:
+    """Remove ZeroApp/To-Archive label from all archived messages that have it."""
+    to_archive = g.label_repo.get_by_name("ZeroApp/To-Archive")
+    if to_archive is None:
+        flash("ZeroApp/To-Archive label not found.", "error")
+        return redirect(url_for("main.archive"))
+
+    msgs = g.msg_repo.list_by_raw_label(
+        to_archive.id, is_archived=True, limit=500
+    )
+    if not msgs:
+        flash("No archived messages with To-Archive label found.", "info")
+        return redirect(url_for("main.archive"))
+
+    request_dto = BulkLabelOperationRequest(
+        message_ids=tuple(m.id for m in msgs),
+        remove_label_ids=frozenset({to_archive.id}),
+    )
+    updated = g.label_svc.apply_bulk_label_operation(request_dto)
+    flash(f"Removed To-Archive label from {len(updated)} message(s).", "success")
+    return redirect(url_for("main.archive"))
 
 
 @main_bp.route("/sync", methods=["POST"])
@@ -161,11 +234,6 @@ def inbox() -> str:
     offset = (page - 1) * per_page
     sort_by, sort_dir = _parse_sort_params(
         default_sort_by="internal_date",
-        default_sort_dir="desc",
-        allowed_sort_by={"internal_date", "sender_domain", "sender", "recipient", "subject", "size_estimate"},
-    )
-    sort_by, sort_dir = _parse_sort_params(
-        default_sort_by="internal_date",
         default_sort_dir="asc",
         allowed_sort_by={"internal_date", "sender_domain", "subject", "size_estimate"},
     )
@@ -179,6 +247,18 @@ def inbox() -> str:
     total_count = g.msg_repo.count_inbox()
     total_pages = max(1, math.ceil(total_count / per_page))
 
+    to_archive_label = g.label_repo.get_by_name("ZeroApp/To-Archive")
+    to_remove_label = g.label_repo.get_by_name("ZeroApp/To-Remove")
+    workflow_label_ids = frozenset(
+        lbl.id for lbl in [to_archive_label, to_remove_label] if lbl is not None
+    )
+    workflow_labeled_message_ids = frozenset(
+        m.id for m in messages if m.label_ids & workflow_label_ids
+    )
+
+    group_by = _parse_group_param()
+    grouped_by_domain = _group_messages_by_domain(messages) if group_by else {}
+
     return render_template(
         "inbox.html",
         messages=messages,
@@ -190,6 +270,10 @@ def inbox() -> str:
         sort_by=sort_by,
         sort_dir=sort_dir,
         show_workflow_labels=_show_workflow_labels(),
+        workflow_labeled_message_ids=workflow_labeled_message_ids,
+        group_by=group_by,
+        grouped_by_domain=grouped_by_domain,
+        page_info=get_page_description("inbox"),
     )
 
 
@@ -210,47 +294,81 @@ def archive() -> str:
         grouped_by_domain dict[str, list[Message]] — domain → messages mapping
                           for the domain-based bulk-action UX in Step 7.
     """
+    show_wf = _show_workflow_labels()
+    group_by = _parse_group_param(default=True)
     sort_by, sort_dir = _parse_sort_params(
         default_sort_by="sender_domain",
         default_sort_dir="asc",
         allowed_sort_by={"sender_domain", "sender", "subject", "internal_date", "size_estimate"},
     )
-    messages = g.msg_repo.list_archive_unlabelled(
+    unlabelled = g.msg_repo.list_archive_unlabelled(
         limit=200,
         sort_by=sort_by,
         sort_dir=sort_dir,
     )
     total_count = g.msg_repo.count_archive_unlabelled()
     to_archive_label = g.label_repo.get_by_name("ZeroApp/To-Archive")
+    to_remove_label = g.label_repo.get_by_name("ZeroApp/To-Remove")
+
     archive_to_archive_count = (
-        g.msg_repo.count_search(
-            MessageFilter(
-                label_id=to_archive_label.id,
-                is_archived=True,
-                limit=1,
-            )
-        )
+        g.msg_repo.count_by_raw_label(to_archive_label.id, is_archived=True)
         if to_archive_label is not None
         else 0
     )
 
-    # Group by sender_domain; preserve order (domains appear in the order
-    # list_archive_unlabelled returns them — already sorted by domain ASC)
+    # Collect workflow label IDs for template filtering
+    workflow_label_ids = frozenset(
+        lbl.id for lbl in [to_archive_label, to_remove_label] if lbl is not None
+    )
+
+    # Archived messages carrying a workflow label are excluded from
+    # list_archive_unlabelled (has_custom_label=True), so fetch and merge them
+    # here.  They are *always* included in the list — the Show/Hide toggle is a
+    # pure presentation concern handled in the template via
+    # workflow_labeled_message_ids, mirroring the inbox/sent/size pages.
+    # Membership is resolved from raw_label_ids, so it is correct even if the
+    # message_labels junction is stale.
+    combined: list[Message] = list(unlabelled)
+    seen_ids = {m.id for m in combined}
+    for wf_label in (to_archive_label, to_remove_label):
+        if wf_label is None:
+            continue
+        wf_msgs = g.msg_repo.list_by_raw_label(
+            wf_label.id, is_archived=True, limit=200
+        )
+        for msg in wf_msgs:
+            if msg.id not in seen_ids:
+                combined.append(msg)
+                seen_ids.add(msg.id)
+
+    workflow_labeled_message_ids = frozenset(
+        m.id for m in combined if m.label_ids & workflow_label_ids
+    )
+
+    # Re-sort the merged list on the active key so workflow messages appended
+    # after the unlabelled query are ordered consistently within their group.
+    sort_key = _ARCHIVE_SORT_KEYS.get(sort_by, _ARCHIVE_SORT_KEYS["sender_domain"])
+    combined.sort(key=sort_key, reverse=sort_dir == "desc")
+
+    # Group by sender_domain
     grouped_by_domain: dict[str, list[Message]] = defaultdict(list)
-    for msg in messages:
+    for msg in combined:
         grouped_by_domain[msg.sender_domain].append(msg)
     grouped_by_domain = dict(sorted(grouped_by_domain.items(), key=lambda item: item[0]))
 
     return render_template(
         "archive.html",
-        messages=messages,
+        messages=combined,
         total_count=total_count,
         grouped_by_domain=dict(grouped_by_domain),
         user_labels=g.label_repo.list_user_labels(),
         sort_by=sort_by,
         sort_dir=sort_dir,
-        show_workflow_labels=_show_workflow_labels(),
+        show_workflow_labels=show_wf,
         archive_to_archive_count=archive_to_archive_count,
+        workflow_labeled_message_ids=workflow_labeled_message_ids,
+        group_by=group_by,
+        page_info=get_page_description("archive"),
     )
 
 
@@ -278,6 +396,18 @@ def sent() -> str:
     )
     total_count = g.msg_repo.count_sent_unresolved()
 
+    to_archive_label = g.label_repo.get_by_name("ZeroApp/To-Archive")
+    to_remove_label = g.label_repo.get_by_name("ZeroApp/To-Remove")
+    workflow_label_ids = frozenset(
+        lbl.id for lbl in [to_archive_label, to_remove_label] if lbl is not None
+    )
+    workflow_labeled_message_ids = frozenset(
+        m.id for m in messages if m.label_ids & workflow_label_ids
+    )
+
+    group_by = _parse_group_param()
+    grouped_by_domain = _group_sent_by_recipient_domain(messages) if group_by else {}
+
     return render_template(
         "sent.html",
         messages=messages,
@@ -286,6 +416,10 @@ def sent() -> str:
         sort_by=sort_by,
         sort_dir=sort_dir,
         show_workflow_labels=_show_workflow_labels(),
+        workflow_labeled_message_ids=workflow_labeled_message_ids,
+        group_by=group_by,
+        grouped_by_domain=grouped_by_domain,
+        page_info=get_page_description("sent"),
     )
 
 
@@ -311,6 +445,18 @@ def size() -> str:
     total_size_bytes = g.msg_repo.total_size_bytes()
     total_size_gb = round(total_size_bytes / (1024 ** 3), 3)
 
+    to_archive_label = g.label_repo.get_by_name("ZeroApp/To-Archive")
+    to_remove_label = g.label_repo.get_by_name("ZeroApp/To-Remove")
+    workflow_label_ids = frozenset(
+        lbl.id for lbl in [to_archive_label, to_remove_label] if lbl is not None
+    )
+    workflow_labeled_message_ids = frozenset(
+        m.id for m in messages if m.label_ids & workflow_label_ids
+    )
+
+    group_by = _parse_group_param()
+    grouped_by_domain = _group_messages_by_domain(messages) if group_by else {}
+
     return render_template(
         "size.html",
         messages=messages,
@@ -320,6 +466,10 @@ def size() -> str:
         sort_by=sort_by,
         sort_dir=sort_dir,
         show_workflow_labels=_show_workflow_labels(),
+        workflow_labeled_message_ids=workflow_labeled_message_ids,
+        group_by=group_by,
+        grouped_by_domain=grouped_by_domain,
+        page_info=get_page_description("size"),
     )
 
 
@@ -355,8 +505,6 @@ def search() -> str:
         total_pages  int           — total number of pages.
         user_labels  list[Label]   — all user labels for the label dropdown.
     """
-    from datetime import UTC, datetime
-
     page = max(1, request.args.get("page", 1, type=int))
     per_page = min(200, max(1, request.args.get("per_page", _DEFAULT_PER_PAGE, type=int)))
     offset = (page - 1) * per_page
@@ -399,6 +547,15 @@ def search() -> str:
     total_pages = max(1, math.ceil(total_count / per_page))
     user_labels = g.label_repo.list_user_labels()
 
+    to_archive_label = g.label_repo.get_by_name("ZeroApp/To-Archive")
+    to_remove_label = g.label_repo.get_by_name("ZeroApp/To-Remove")
+    workflow_label_ids = frozenset(
+        lbl.id for lbl in [to_archive_label, to_remove_label] if lbl is not None
+    )
+    workflow_labeled_message_ids = frozenset(
+        m.id for m in messages if m.label_ids & workflow_label_ids
+    )
+
     # Filters dict for repopulating the form inputs in the template
     filters = {
         "sender": mf.sender or "",
@@ -413,6 +570,9 @@ def search() -> str:
         "is_unread": request.args.get("is_unread", ""),
     }
 
+    group_by = _parse_group_param()
+    grouped_by_domain = _group_messages_by_domain(messages) if group_by else {}
+
     return render_template(
         "search.html",
         messages=messages,
@@ -423,7 +583,43 @@ def search() -> str:
         per_page=per_page,
         user_labels=user_labels,
         show_workflow_labels=_show_workflow_labels(),
+        workflow_labeled_message_ids=workflow_labeled_message_ids,
+        group_by=group_by,
+        grouped_by_domain=grouped_by_domain,
     )
+
+
+# ## Labels ##
+
+
+@main_bp.route("/labels/create", methods=["POST"])
+def create_label() -> Response:
+    """Create a new ZeroApp-namespaced label in Gmail and sync it to the local DB."""
+    name = request.form.get("label_name", "").strip()
+    if not name:
+        flash("Label name is required.", "error")
+        return redirect(url_for("main.settings_page"))
+    full_name = f"ZeroApp/{name}" if not name.startswith("ZeroApp/") else name
+    raw = g.client.create_label(full_name)
+    label = Label(
+        id=raw["id"],
+        name=raw["name"],
+        label_type=LabelType.USER,
+        message_list_visibility=(
+            MessageListVisibility(raw["messageListVisibility"])
+            if raw.get("messageListVisibility")
+            else None
+        ),
+        label_list_visibility=(
+            LabelListVisibility(raw["labelListVisibility"])
+            if raw.get("labelListVisibility")
+            else None
+        ),
+        synced_at=datetime.now(UTC),
+    )
+    g.label_repo.upsert(label)
+    flash(f"Label '{full_name}' created.", "success")
+    return redirect(url_for("main.settings_page"))
 
 
 # ## Settings ##

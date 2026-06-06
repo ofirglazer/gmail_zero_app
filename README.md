@@ -1,25 +1,92 @@
-# TODO
+## Not Yet Implemented (Future Enhancements)
 
-## orders for next step
-* all test must pass, all Ruff fixed or explained, all mypy fixed or explained.
-* Show class, data flow, sequence and ladder UML diagrams.
-* Finish Step 7 implementation.  
-* in archive page, add button to remove To-Archive label from {current number of messages in archive labeled "To-Archive"} from messages in archive.
-* in size zero page, add labeling UI as in the other pages.
-* in all pages enable user to sort by ascending or descending fields by pressing column headers, similar to excel table.
-* in all pages add in the table card header a checkbox to show/hide messages labels To-Remove or To-Archive. Default is hide.
-* in the dashboard add "Ready to archive" and "Ready to delete " count on the dashboard. It is a temporary counter card, makes the handoff explicit and gives a satisfying number to drive to zero outside the app.
-* in size zero page and in search page, allow user to modify labels of messages.
-* allow double click or pressing Full Message when hovering over a message to see it in a reading pane to the right, similar to gmail reading pane. The entire message text without attachment will be downloaded and displayed there. Support keyboard shortcuts: Esc to close modal, Enter to open, arrow keys to move between messages.
-* dark/white mode support
-* in settings select font size small-medium-karge that effects UI, message subject and message snippets and full text
+Features listed in the PRD but not yet implemented:
 
+### UI/UX
+- **Keyboard shortcuts** — keyboard-driven navigation and labeling
+- **Mobile responsiveness** — touch-friendly interface, swipe gestures
+- **Dashboard counter styling** — "Ready to archive" and "Ready to delete" counters need visual improvement to match goal cards
+- **Font size selector** — small/medium/large theme options
 
-## for production 
-* GMAIL_ZERO_DEBUG=false
-* SECURITY: Generate a strong random key for production.
-* settings.py: debug: bool = False
+### Settings & Configuration
+- **Sync schedule UI** — configure auto-sync frequency and timing
+- **Label customization** — edit label names and create custom labels via UI
+- **Desktop notifications** — browser/system notifications for sync completion and daily reminders
+- **Data export** — export session history and label operations as CSV
 
+### Core Features
+- **CLI interface** — command-line management of labels and syncs
+- **Automatic archiving** — auto-archive messages after labeling (currently user archives manually in Gmail)
+- **OAuth token revocation** — logout button to revoke Gmail access
+- **Import/export** — backup and restore local database
+
+### Production Features
+- **Log rotation** — implement `RotatingFileHandler` with 10MB max size
+- **Email encryption at rest** — encrypt cached message bodies (optional)
+- **Audit dashboard** — view all label operations with timestamps
+
+---
+
+## Setup & Deployment
+
+### Environment Configuration
+
+```bash
+# Demo mode (default — synthetic data)
+GMAIL_ZERO_ENV=demo python -m presentation.app
+
+# Production mode (real Gmail)
+GMAIL_ZERO_ENV=production GMAIL_ZERO_DEBUG=false python -m presentation.app
+```
+
+**Production requirements:**
+- Generate strong `SECRET_KEY` (replace default in `.env`)
+- Enable HTTPS (reverse proxy with Nginx or similar)
+- Encrypt token file on disk
+
+---
+
+## Database & Backup
+
+### Copying the Database to Another PC
+
+The database is a standard SQLite file. To move it to another PC:
+
+**Step 1: Locate the database**
+```bash
+# Default location (check .env or config/settings.py)
+data/gmail_zero_app.db
+```
+
+**Step 2: Back up the database**
+```powershell
+# On source PC, with app stopped
+Copy-Item -Path "data/gmail_zero_app.db" -Destination "backup_gmail_zero.db"
+```
+
+**Step 3: Transfer to target PC**
+- Use USB drive, cloud sync, or email
+- Place in target PC's `data/gmail_zero_app.db` (same path structure)
+
+**Step 4: Verify**
+```bash
+# On target PC, start the app (it will read the existing database)
+python -m presentation.app
+```
+
+**Notes:**
+- The database contains only **metadata** (sender, subject, date, labels, size, snippets) — no email bodies or attachments
+- OAuth credentials are stored separately in `data/credentials/` — transfer those too if using production mode
+- The database is not encrypted by default; encrypt the backup if it contains sensitive metadata
+- SQLite is cross-platform (Windows/Mac/Linux); the `.db` file works unchanged
+
+**Backup strategy:**
+```bash
+# Automated daily backup
+cp data/gmail_zero_app.db "backups/gmail_zero_$(date +%Y-%m-%d).db"
+```
+
+---
 
 # gmail_zero_app
 
@@ -58,8 +125,8 @@ git clone <repo-url> gmail_zero_app
 cd gmail_zero_app
 
 # 2. Create and activate a virtual environment
-python3.11 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+python -m venv .venv
+.venv\Scripts\activate
 
 # 3. Install dependencies
 pip install -r requirements-dev.txt
@@ -137,15 +204,147 @@ ruff format --diff .
 
 ---
 
+## Architecture
+
+The application follows a strict layered architecture with no dependency leakage
+between layers.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Presentation  Flask routes · Jinja2 templates · JS      │
+├─────────────────────────────────────────────────────────┤
+│  Application   LabelService · SyncService · Analytics   │
+│                SearchService · LabelConfigService        │
+├─────────────────────────────────────────────────────────┤
+│  Domain        Message · Thread · Label · SyncState     │
+│                DailySnapshot · SafetyGuard (stateless)  │
+├─────────────────────────────────────────────────────────┤
+│  Infrastructure  GmailClient · GmailMapper · OAuth      │
+│                  MessageRepo · LabelRepo · SnapshotRepo  │
+│                  SyncStateRepo · SyncScheduler          │
+├─────────────────────────────────────────────────────────┤
+│  Config        Settings (Pydantic) · OAuthScopes        │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Key design decisions:**
+
+- **Immutable domain entities** — all domain models are frozen dataclasses;
+  label changes produce new instances rather than mutating in place.
+- **Three-layer safety** — OAuth scopes (Google-enforced), SafetyGuard
+  (domain-layer validation), and GmailClient method whitelist (infrastructure
+  enforcement). All three must be defeated independently to perform a forbidden
+  operation.
+- **Repository pattern** — data access is abstracted behind repositories;
+  services never query the ORM directly.
+- **Dependency injection** — services receive all dependencies through their
+  constructors; Flask `g` carries request-scoped services.
+- **Demo mode** — `MockGmailClient` provides synthetic data so the app runs
+  fully without Gmail credentials.
+
+See `docs/uml_diagrams.md` for class, data-flow, sequence, and ER diagrams.
+
+---
+
+## Operation
+
+### First run (demo mode)
+
+```bash
+python -m presentation.app
+```
+
+On first launch the app seeds 90 days of synthetic snapshots and starts the
+background sync scheduler. Open `http://127.0.0.1:5000`.
+
+### Sync behaviour
+
+- **Full sync** — fetches all message metadata in batches of 100; rate-limited
+  at 50 ms between batches to stay within Gmail quota.
+- **Incremental sync** — uses the Gmail History API to fetch only changed
+  messages since the last known `history_id`; falls back to a full sync if the
+  history watermark has expired.
+- **Scheduler** — APScheduler triggers incremental syncs in the background;
+  full syncs run daily.
+
+### Label workflow
+
+All label changes go through a five-step pipeline:
+
+1. `SafetyGuard` validates the request (raises `SafetyViolationError` if
+   forbidden).
+2. `GmailClient.modify_message_labels()` writes the change to Gmail
+   immediately.
+3. `MessageRepository.update_labels()` updates the local SQLite cache.
+4. `LabelRepository.sync_message_labels()` rebuilds the junction table.
+5. `LabelRepository.log_label_operation()` appends an audit record.
+
+### Safety constraints
+
+The application **cannot**:
+- Delete or archive messages
+- Send or draft emails
+- Modify message bodies
+- Add TRASH, SPAM, DRAFT, or SENT labels
+- Remove INBOX, SENT, STARRED, IMPORTANT, or CATEGORY_* labels
+- Exceed 500 messages per bulk operation
+
+---
+
 ## Implementation Progress
 
-| Step | Description                                | Status     |
-|------|--------------------------------------------|------------|
-| 1    | Project skeleton & configuration           | ✅ Complete |
-| 2    | Domain models & safety guard               | ✅ Complete |
-| 3    | Database layer (SQLAlchemy + repositories) | ✅ Complete |
+| Step | Description                                | Status      |
+|------|--------------------------------------------|-------------|
+| 1    | Project skeleton & configuration           | ✅ Complete  |
+| 2    | Domain models & safety guard               | ✅ Complete  |
+| 3    | Database layer (SQLAlchemy + repositories) | ✅ Complete  |
 | 4    | Mock Gmail client & OAuth stub             | ✅ Complete  |
 | 5    | Sync engine & application services         | ✅ Complete  |
 | 6    | Flask app & core routes (read-only)        | ✅ Complete  |
-| 7    | Labelling UI & bulk operations             | ⏳ Pending  |
-| 8    | Progress graphs, snapshots & hardening     | ⏳ Pending  |
+| 7    | Labelling UI & bulk operations             | ✅ Complete  |
+| 8    | Progress graphs, snapshots & hardening     | ✅ Complete  |
+| 9    | Documentation (UML, README, PRD, usage)    | ✅ Complete  |
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**"Port 5000 already in use"**
+```bash
+# Find and stop the process
+Get-NetTCPConnection -LocalPort 5000 | Stop-Process -Force
+```
+
+**"Gmail API disabled for this project"**
+- Enable the Gmail API in Google Cloud Console
+- Create OAuth 2.0 credentials (Desktop/Personal type)
+- See `docs/setup_production.md` for full instructions
+
+**"No messages found after sync"**
+- Check that you're in demo mode: `echo $env:GMAIL_ZERO_ENV` should be `demo`
+- Production mode: verify OAuth credentials in `data/credentials/`
+- Run a manual sync from Settings page
+
+**"Database locked"**
+- Ensure only one instance of the app is running
+- If crashed, delete `data/.lock` (if it exists)
+
+---
+
+## Contributing
+
+Contributions follow these standards:
+
+- All tests must pass: `pytest`
+- Type checking: `mypy .`
+- Formatting: `ruff format .`
+- Linting: `ruff check .`
+- PRD must be updated for new features
+
+---
+
+## License
+
+MIT

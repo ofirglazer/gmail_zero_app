@@ -34,7 +34,7 @@
         <label class="form-label" for="label_id">Label</label>
         <select class="form-select" id="label_id" name="label_id">
           <option value="">— any —</option>
-          {% for lbl in user_labels %}
+          {% for lbl in user_labels | sort(attribute='name') %}
           <option value="{{ lbl.id }}" {{ 'selected' if filters.label_id == lbl.id else '' }}>{{ lbl.name }}</option>
           {% endfor %}
         </select>
@@ -67,10 +67,82 @@
 {% if total_count is defined and request.args %}
 <div class="results-meta ani">
   <span class="results-count">{{ total_count }} message{{ 's' if total_count != 1 }} found</span>
+  <a href="{{ url_for('main.search', page=1, per_page=per_page, sender=filters.sender, sender_domain=filters.sender_domain, subject_contains=filters.subject_contains, label_id=filters.label_id, date_from=filters.date_from, date_to=filters.date_to, is_inbox=filters.is_inbox, is_sent=filters.is_sent, is_unread=filters.is_unread) if show_workflow_labels else url_for('main.search', page=1, per_page=per_page, sender=filters.sender, sender_domain=filters.sender_domain, subject_contains=filters.subject_contains, label_id=filters.label_id, date_from=filters.date_from, date_to=filters.date_to, is_inbox=filters.is_inbox, is_sent=filters.is_sent, is_unread=filters.is_unread, show_workflow_labels='1') }}" class="btn btn-ghost btn-sm" style="margin-left:10px">
+    {{ 'Hide' if show_workflow_labels else 'Show' }} To-Archive/To-Remove labels
+  </a>
 </div>
 
 {% if messages %}
+<form method="post" action="{{ url_for('main.apply_label') }}">
+<input type="hidden" name="next" value="{{ request.full_path }}">
 <div class="table-card ani">
+  <div class="table-card-hdr">
+    <span class="table-card-title">
+      Search results
+      <span class="chip chip-teal">{{ total_count }} total</span>
+    </span>
+    <div class="label-actionbar">
+      <a href="{{ url_for('main.search', page=1, per_page=per_page, sender=filters.sender, sender_domain=filters.sender_domain, subject_contains=filters.subject_contains, label_id=filters.label_id, date_from=filters.date_from, date_to=filters.date_to, is_inbox=filters.is_inbox, is_sent=filters.is_sent, is_unread=filters.is_unread) if show_workflow_labels else url_for('main.search', page=1, per_page=per_page, sender=filters.sender, sender_domain=filters.sender_domain, subject_contains=filters.subject_contains, label_id=filters.label_id, date_from=filters.date_from, date_to=filters.date_to, is_inbox=filters.is_inbox, is_sent=filters.is_sent, is_unread=filters.is_unread, show_workflow_labels='1') }}" class="btn btn-ghost btn-sm" style="margin-right:10px">
+        {{ 'Hide' if show_workflow_labels else 'Show' }} To-Archive/To-Remove labels
+      </a>
+      <a href="{{ request.path }}?page=1&per_page={{ per_page }}&sender={{ filters.sender }}&sender_domain={{ filters.sender_domain }}&subject_contains={{ filters.subject_contains }}&label_id={{ filters.label_id }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&is_inbox={{ filters.is_inbox }}&is_sent={{ filters.is_sent }}&is_unread={{ filters.is_unread }}{% if not group_by %}&group=1{% endif %}{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}" class="btn btn-ghost btn-sm" style="margin-right:10px">
+        {{ 'Ungroup' if group_by else 'Group by domain' }}
+      </a>
+      <select class="form-select form-select-sm" name="label_id" aria-label="Label to apply">
+        <option value="">Choose label</option>
+        {% for lbl in user_labels | sort(attribute='name') %}
+        <option value="{{ lbl.id }}">{{ lbl.name }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+    </div>
+  </div>
+  {% if group_by %}
+  {% for domain, domain_msgs in grouped_by_domain.items() %}
+  <div class="domain-section ani">
+    <div class="domain-hdr">
+      <span class="domain-name">{{ domain }}</span>
+      <span class="domain-count">{{ domain_msgs | length }}</span>
+    </div>
+    <div class="domain-body">
+      <table class="dtable">
+        <thead>
+          <tr>
+            <th style="width:40px"><input type="checkbox" aria-label="Select all from {{ domain }}"></th>
+            <th>From</th><th>Subject</th><th>Location</th><th>Age</th><th style="text-align:right">Size</th><th>Labels</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for msg in domain_msgs %}
+          {% if not show_workflow_labels and msg.id in workflow_labeled_message_ids %}
+          {% else %}
+          <tr class="{{ 'row-unread' if msg.is_unread else '' }}" data-msg-id="{{ msg.id }}">
+            <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
+            <td><span class="cell-sender" title="{{ msg.sender }}">{{ msg.sender_domain }}</span></td>
+            <td><span class="cell-subject">{{ msg.subject or '(no subject)' }}</span></td>
+            <td>
+              {% if msg.is_inbox %}<span class="loc-pill loc-inbox">Inbox</span>
+              {% elif msg.is_sent %}<span class="loc-pill loc-sent">Sent</span>
+              {% else %}<span class="loc-pill loc-archive">Archive</span>{% endif %}
+            </td>
+            <td><span class="cell-date">{{ msg.age_days | age_label }} ago</span></td>
+            <td><span class="cell-size">{{ msg.size_estimate | format_size }}</span></td>
+            <td>
+              {% for lid in msg.label_ids %}
+                {% if lid not in ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED','IMPORTANT','UNREAD'] and not lid.startswith('CATEGORY_') %}
+                <span class="chip chip-teal">{{ labels_by_id.get(lid, lid) }}</span>
+                {% endif %}
+              {% endfor %}
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
   <div class="tbl-wrap">
     <table class="dtable">
       <thead>
@@ -81,7 +153,9 @@
       </thead>
       <tbody>
         {% for msg in messages %}
-        <tr class="{{ 'row-unread' if msg.is_unread else '' }}">
+        {% if not show_workflow_labels and msg.id in workflow_labeled_message_ids %}
+        {% else %}
+        <tr class="{{ 'row-unread' if msg.is_unread else '' }}" data-msg-id="{{ msg.id }}">
           <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
           <td><span class="cell-sender" title="{{ msg.sender }}">{{ msg.sender_domain }}</span></td>
           <td><span class="cell-subject">{{ msg.subject or '(no subject)' }}</span></td>
@@ -95,15 +169,17 @@
           <td>
             {% for lid in msg.label_ids %}
               {% if lid not in ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED','IMPORTANT','UNREAD'] and not lid.startswith('CATEGORY_') %}
-              <span class="chip chip-teal">{{ lid.split('/')[-1] }}</span>
+              <span class="chip chip-teal">{{ labels_by_id.get(lid, lid) }}</span>
               {% endif %}
             {% endfor %}
           </td>
         </tr>
+        {% endif %}
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% endif %}
   {% if total_pages > 1 %}
   <div class="pagination">
     <span class="pag-info">Page {{ page }} of {{ total_pages }} · {{ total_count }} results</span>
@@ -115,6 +191,7 @@
   </div>
   {% endif %}
 </div>
+</form>
 {% else %}
 <div class="empty ani">
   <div class="empty-icon">🔍</div>

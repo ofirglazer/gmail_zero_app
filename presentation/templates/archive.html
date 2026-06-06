@@ -8,12 +8,21 @@
     <p class="page-desc">Archived messages with no custom label, grouped by sender domain.</p>
   </div>
   <div class="page-actions">
+    {% if archive_to_archive_count > 0 %}
+    <form method="post" action="{{ url_for('main.remove_to_archive_label') }}" style="display:inline">
+      <button type="submit" class="btn btn-secondary btn-sm">
+        Remove To-Archive label from {{ archive_to_archive_count }} message{{ 's' if archive_to_archive_count != 1 else '' }} in Archive
+      </button>
+    </form>
+    {% endif %}
     <a class="btn btn-secondary btn-sm" target="_blank" rel="noopener noreferrer"
        href="https://mail.google.com/mail/u/0/#search/label%3AZeroApp%2FTo-Remove+in%3Ainbox">
       Open To-Remove in Gmail
     </a>
   </div>
 </div>
+
+{{ render_page_info(page_info) }}
 
 {% if messages %}
 <form method="post" action="{{ url_for('main.apply_label') }}">
@@ -22,19 +31,26 @@
   <div class="table-card-hdr">
     <span class="table-card-title">
       Archived messages
-      <span class="chip chip-teal">{{ total_count }} total</span>
+      <span class="chip chip-teal">{{ total_count }} Unlabeled</span>
     </span>
     <div class="label-actionbar">
+      <a href="{{ url_for('main.archive', sort=sort_by, dir=sort_dir) if show_workflow_labels else url_for('main.archive', sort=sort_by, dir=sort_dir, show_workflow_labels='1') }}" class="btn btn-ghost btn-sm" style="margin-right:10px">
+        {{ 'Hide' if show_workflow_labels else 'Show' }} To-Archive/To-Remove labels
+      </a>
+      <a href="{{ request.path }}?sort={{ sort_by }}&dir={{ sort_dir }}{% if group_by %}&group=0{% endif %}{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}" class="btn btn-ghost btn-sm" style="margin-right:10px">
+        {{ 'Ungroup' if group_by else 'Group by domain' }}
+      </a>
       <select class="form-select form-select-sm" name="label_id" aria-label="Label to apply">
         <option value="">Choose label</option>
-        {% for lbl in user_labels %}
+        {% for lbl in user_labels | sort(attribute='name') %}
         <option value="{{ lbl.id }}">{{ lbl.name }}</option>
         {% endfor %}
       </select>
       <button type="submit" class="btn btn-primary btn-sm">Apply to selected</button>
     </div>
   </div>
-  {# Domain sections sit inside the table-card so they share its visual container #}
+  {# Domain sections or flat list depending on group_by toggle #}
+  {% if group_by %}
   {% for domain, domain_msgs in grouped_by_domain.items() %}
   <div class="domain-section ani">
     <div class="domain-hdr">
@@ -46,12 +62,18 @@
         <thead>
           <tr>
             <th style="width:40px"><input type="checkbox" aria-label="Select all from {{ domain }}"></th>
-            <th>From</th><th>Subject</th><th>Age</th><th>Size</th>
+            <th><a href="{{ request.path }}?sort=sender_domain&dir={{ 'asc' if sort_by == 'sender_domain' and sort_dir == 'desc' else 'desc' }}{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">From {% if sort_by == 'sender_domain' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+            <th><a href="{{ request.path }}?sort=subject&dir={{ 'asc' if sort_by == 'subject' and sort_dir == 'desc' else 'desc' }}{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">Subject {% if sort_by == 'subject' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+            <th><a href="{{ request.path }}?sort=internal_date&dir={{ 'asc' if sort_by == 'internal_date' and sort_dir == 'desc' else 'desc' }}{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">Age {% if sort_by == 'internal_date' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+            <th><a href="{{ request.path }}?sort=size_estimate&dir={{ 'asc' if sort_by == 'size_estimate' and sort_dir == 'desc' else 'desc' }}{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">Size {% if sort_by == 'size_estimate' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+            <th>Labels</th>
           </tr>
         </thead>
         <tbody>
           {% for msg in domain_msgs %}
-          <tr>
+          {% if not show_workflow_labels and msg.id in workflow_labeled_message_ids %}
+          {% else %}
+          <tr data-msg-id="{{ msg.id }}">
             <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
             <td><span class="cell-sender" title="{{ msg.sender }}">{{ msg.sender_domain }}</span></td>
             <td>
@@ -62,13 +84,63 @@
             </td>
             <td><span class="cell-date">{{ msg.age_days | age_label }} ago</span></td>
             <td><span class="cell-size">{{ msg.size_estimate | format_size }}</span></td>
+            <td>
+              {% for lid in msg.label_ids %}
+                {% if lid not in ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED','IMPORTANT','UNREAD'] and not lid.startswith('CATEGORY_') %}
+                <span class="chip chip-teal">{{ labels_by_id.get(lid, lid) }}</span>
+                {% endif %}
+              {% endfor %}
+            </td>
           </tr>
+          {% endif %}
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
   {% endfor %}
+  {% else %}
+  <div class="tbl-wrap">
+    <table class="dtable">
+      <thead>
+        <tr>
+          <th style="width:40px"><input type="checkbox" id="sel-all" aria-label="Select all"></th>
+          <th><a href="{{ request.path }}?sort=sender_domain&dir={{ 'asc' if sort_by == 'sender_domain' and sort_dir == 'desc' else 'desc' }}&group=0{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">From {% if sort_by == 'sender_domain' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+          <th><a href="{{ request.path }}?sort=subject&dir={{ 'asc' if sort_by == 'subject' and sort_dir == 'desc' else 'desc' }}&group=0{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">Subject {% if sort_by == 'subject' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+          <th><a href="{{ request.path }}?sort=internal_date&dir={{ 'asc' if sort_by == 'internal_date' and sort_dir == 'desc' else 'desc' }}&group=0{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">Age {% if sort_by == 'internal_date' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+          <th><a href="{{ request.path }}?sort=size_estimate&dir={{ 'asc' if sort_by == 'size_estimate' and sort_dir == 'desc' else 'desc' }}&group=0{% if show_workflow_labels %}&show_workflow_labels=1{% endif %}">Size {% if sort_by == 'size_estimate' %}<span class="sort-icon">{{ '↑' if sort_dir == 'asc' else '↓' }}</span>{% endif %}</a></th>
+          <th>Labels</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for msg in messages %}
+        {% if not show_workflow_labels and msg.id in workflow_labeled_message_ids %}
+        {% else %}
+        <tr data-msg-id="{{ msg.id }}">
+          <td><input type="checkbox" name="message_ids" value="{{ msg.id }}" aria-label="Select"></td>
+          <td><span class="cell-sender" title="{{ msg.sender }}">{{ msg.sender_domain }}</span></td>
+          <td>
+            <span class="cell-subject">{{ msg.subject or '(no subject)' }}</span>
+            {% if msg.snippet %}
+            <span class="cell-snippet">{{ msg.snippet }}</span>
+            {% endif %}
+          </td>
+          <td><span class="cell-date">{{ msg.age_days | age_label }} ago</span></td>
+          <td><span class="cell-size">{{ msg.size_estimate | format_size }}</span></td>
+          <td>
+            {% for lid in msg.label_ids %}
+              {% if lid not in ['INBOX','SENT','DRAFT','TRASH','SPAM','STARRED','IMPORTANT','UNREAD'] and not lid.startswith('CATEGORY_') %}
+              <span class="chip chip-teal">{{ labels_by_id.get(lid, lid) }}</span>
+              {% endif %}
+            {% endfor %}
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
 </div>{# /.table-card #}
 </form>
 {% else %}

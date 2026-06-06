@@ -32,9 +32,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from config.settings import Environment, Settings
-from domain.exceptions import LabelOperationError, SafetyViolationError
-from domain.safety.guard import SafetyGuard
 from application.dto.label_operation import (
     BulkLabelOperationRequest,
     LabelOperationRequest,
@@ -44,6 +41,9 @@ from application.services.analytics_service import AnalyticsService
 from application.services.label_service import LabelService
 from application.services.search_service import SearchService
 from application.services.sync_service import SyncService
+from config.settings import Environment, Settings
+from domain.exceptions import LabelOperationError, SafetyViolationError
+from domain.safety.guard import SafetyGuard
 from infrastructure.gmail.mapper import GmailMapper
 from infrastructure.gmail.mock_client import MockGmailClient
 from infrastructure.persistence.database import build_engine, get_session, initialise_db
@@ -123,7 +123,7 @@ def synced_engine(
     return engine, client
 
 
-@pytest.fixture()
+@pytest.fixture
 def fresh_synced_db(
     demo_settings: Settings,
 ) -> tuple[Engine, MockGmailClient, Settings]:
@@ -588,6 +588,7 @@ class TestLabelService:
     ) -> None:
         """Every label operation must produce an audit log entry."""
         from sqlalchemy import select
+
         from infrastructure.persistence.models import LabelOperationLogORM
 
         engine, client, _ = fresh_synced_db

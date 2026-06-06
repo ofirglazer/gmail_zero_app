@@ -9,6 +9,7 @@ Marker registration is in pyproject.toml [tool.pytest.ini_options].
 """
 
 from pathlib import Path
+
 import pytest
 
 from config.settings import Environment, Settings

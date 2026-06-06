@@ -25,14 +25,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from domain.exceptions import LabelOperationError
-from application.dto.label_operation import LabelOperationRequest, LabelToggleRequest
+from application.dto.label_operation import LabelOperationRequest
 from domain.exceptions import LabelOperationError
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-    from application.dto.label_operation import BulkLabelOperationRequest, LabelOperationRequest
+    from application.dto.label_operation import BulkLabelOperationRequest, LabelToggleRequest
     from domain.models.message import Message
     from domain.safety.guard import SafetyGuard
     from infrastructure.gmail.client import AbstractGmailClient
@@ -130,7 +129,7 @@ class LabelService:
             ),
         )
 
-        # ── Steps 4–6: Persist the new label state; log each changed label ───
+        # ── Steps 4-6: Persist the new label state; log each changed label ───
         new_label_ids: frozenset[str] = frozenset(api_response.get("labelIds", []))
 
         try:
@@ -175,7 +174,7 @@ class LabelService:
         # ## Step 7: Return updated domain entity ##
         updated = self._msg_repo.get_by_id(request.message_id)
         # get_by_id should always find the row we just upserted
-        assert updated is not None, f"Message {request.message_id!r} vanished after update"
+        assert updated is not None, f"Message {request.message_id!r} vanished after update"  # nosec B101: internal invariant check, not user-facing
         return updated
 
     def apply_bulk_label_operation(

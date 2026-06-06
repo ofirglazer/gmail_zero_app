@@ -27,6 +27,7 @@ Step 5 additions:
 
 from __future__ import annotations
 
+import base64
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from domain.exceptions import ForbiddenOperationError
@@ -221,6 +222,22 @@ class AbstractGmailClient(Protocol):
 
         Returns:
             Dict with ``emailAddress``, ``messagesTotal``, ``historyId``, etc.
+        """
+        ...
+
+    def get_message_body(self, message_id: str) -> str:
+        """
+        Fetch the full message body text for a single message.
+
+        Calls ``users.messages.get`` with format="full" and extracts the
+        text/plain MIME part from the payload, decoding base64url encoding.
+
+        Args:
+            message_id: Gmail message ID.
+
+        Returns:
+            The message body text (plain text). Returns empty string if no
+            text/plain part is found.
         """
         ...
 
@@ -436,3 +453,49 @@ class GmailClient:
         """Fetch user profile. See AbstractGmailClient for full docstring."""
         self._check_not_forbidden("users.getProfile")
         return self._service.users().getProfile(userId="me").execute()  # type: ignore[no-any-return]
+
+    def get_message_body(self, message_id: str) -> str:
+        """
+        Fetch the full message body text.
+
+        See AbstractGmailClient for full docstring.
+        """
+        self._check_not_forbidden("users.messages.get")
+        msg = self._service.users().messages().get(
+            userId="me",
+            id=message_id,
+            format="full",
+        ).execute()
+
+        # Extract text/plain part from payload
+        payload = msg.get("payload", {})
+        body_text = self._extract_text_from_payload(payload)
+        return body_text
+
+    def _extract_text_from_payload(self, payload: dict[str, Any]) -> str:
+        """Recursively extract text/plain from MIME payload structure."""
+        # Check if this part is text/plain
+        headers = payload.get("headers", [])
+        content_type_header = next(
+            (h["value"] for h in headers if h.get("name") == "Content-Type"),
+            None,
+        )
+
+        if content_type_header and "text/plain" in content_type_header:
+            body = payload.get("body", {})
+            data = body.get("data", "")
+            if data:
+                try:
+                    decoded = base64.urlsafe_b64decode(data + "==")
+                    return decoded.decode("utf-8", errors="replace")
+                except Exception:  # nosec B110: intentional best-effort fallback when decoding fails
+                    pass
+
+        # Recursively check parts
+        parts = payload.get("parts", [])
+        for part in parts:
+            text = self._extract_text_from_payload(part)
+            if text:
+                return text
+
+        return ""

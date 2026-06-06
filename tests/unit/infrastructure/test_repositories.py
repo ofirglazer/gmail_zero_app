@@ -19,8 +19,7 @@ live engine and are specific to infrastructure tests.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime, timedelta
-from pathlib import Path
-from typing import TYPE_CHECKING, Generator
+from typing import TYPE_CHECKING
 
 import pytest
 from sqlalchemy import Engine, inspect, text
@@ -41,6 +40,9 @@ from infrastructure.persistence.repositories import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Generator
+    from pathlib import Path
+
     from sqlalchemy.orm import Session
 
 # ── Shared fixtures ───────────────────────────────────────────────────────────

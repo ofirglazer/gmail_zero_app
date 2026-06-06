@@ -151,7 +151,7 @@ class OAuthHandler:
                     params={"token": credentials.token},
                     timeout=10,
                 )
-        except Exception:
+        except Exception:  # nosec B110: intentional best-effort cleanup, always delete token regardless
             pass  # Best-effort — always delete local token
         finally:
             if self._token_path.exists():

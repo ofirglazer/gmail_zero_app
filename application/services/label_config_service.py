@@ -28,12 +28,13 @@ The [app] section is metadata (label_namespace), not a label definition.
 from __future__ import annotations
 
 import tomllib
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from domain.exceptions import LabelConfigError
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from infrastructure.gmail.client import AbstractGmailClient
     from infrastructure.persistence.repositories.label_repository import LabelRepository
 

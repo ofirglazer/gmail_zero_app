@@ -41,6 +41,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from infrastructure.persistence.models import Base
 
 if TYPE_CHECKING:
+    import sqlite3
     from collections.abc import Generator
 
 
@@ -69,7 +70,6 @@ def build_engine(db_url: str, *, echo: bool = False) -> Engine:
         connect_args={"check_same_thread": False},
     )
 
-    import sqlite3
 
     @event.listens_for(engine, "connect")
     def _configure_sqlite(dbapi_connection: sqlite3.Connection, _connection_record: object) -> None:

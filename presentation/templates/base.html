@@ -5,9 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Gmail Zero{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script>
+    const savedTheme = localStorage.getItem('theme');
+    const savedFontSize = localStorage.getItem('fontsize');
+    if (savedTheme) document.documentElement.setAttribute('data-theme', savedTheme);
+    if (savedFontSize) document.documentElement.setAttribute('data-font', savedFontSize);
+  </script>
   {% block head %}{% endblock %}
 </head>
 <body>
+
+{# ── Jinja2 Macro: Page Info Card ──────────────────────────────────────────── #}
+{% macro render_page_info(text) %}
+{% if text %}
+<div class="page-info-card ani">
+  <div class="page-info-icon">💡</div>
+  <div class="page-info-text">{{ text }}</div>
+</div>
+{% endif %}
+{% endmacro %}
 
 <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
 <aside class="sidebar" id="sidebar">
@@ -88,6 +104,12 @@
     </a>
   </nav>
 
+  <div style="padding:12px 14px;border-top:1px solid var(--sb-border);display:flex;gap:8px">
+    <button id="theme-toggle" class="btn btn-ghost btn-sm" style="flex:1;justify-content:center" title="Toggle dark/light mode">
+      <span id="theme-icon">🌙</span>
+    </button>
+  </div>
+
   <div class="sb-footer">gmail-zero · v0.6.0</div>
 </aside>
 
@@ -97,6 +119,7 @@
 <!-- ── App body ─────────────────────────────────────────────────────────── -->
 <div class="app-body">
   <main class="page-shell">
+
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
       <div class="flash-stack">
@@ -108,6 +131,24 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
+</div>
+
+<!-- ── Reading Pane ───────────────────────────────────────────────────────── -->
+<div id="reading-pane" class="reading-pane" hidden>
+  <div class="rp-header">
+    <div class="rp-meta">
+      <h2 class="rp-subject" id="rp-subject"></h2>
+      <p class="rp-from" id="rp-from"></p>
+      <p class="rp-date" id="rp-date"></p>
+    </div>
+    <div class="rp-controls">
+      <button id="rp-prev-btn" class="btn btn-ghost btn-sm" title="Previous (↑)" aria-label="Previous">↑</button>
+      <span class="rp-nav-counter"><span id="rp-idx">0</span>/<span id="rp-total">0</span></span>
+      <button id="rp-next-btn" class="btn btn-ghost btn-sm" title="Next (↓)" aria-label="Next">↓</button>
+      <button id="rp-close-btn" class="btn btn-ghost btn-sm" title="Close (Esc)" aria-label="Close">✕</button>
+    </div>
+  </div>
+  <div class="rp-body" id="rp-body"></div>
 </div>
 
 <script src="https://unpkg.com/htmx.org@1.9.10"
@@ -132,6 +173,121 @@
       });
     });
   });
+
+  // Theme toggle (dark/light mode)
+  // Always set an explicit data-theme so we can override the OS media query in both directions.
+  const themeBtn = document.getElementById('theme-toggle');
+  const themeIcon = document.getElementById('theme-icon');
+  if (themeBtn && themeIcon) {
+    const isDark = () => document.documentElement.getAttribute('data-theme') === 'dark'
+      || (!document.documentElement.getAttribute('data-theme')
+          && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    const updateThemeIcon = () => {
+      themeIcon.textContent = isDark() ? '☀️' : '🌙';
+    };
+    updateThemeIcon();
+    themeBtn.addEventListener('click', () => {
+      const next = isDark() ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('theme', next);
+      updateThemeIcon();
+    });
+  }
+
+  // Reading Pane
+  const pane = document.getElementById('reading-pane');
+  const rpSubject = document.getElementById('rp-subject');
+  const rpFrom = document.getElementById('rp-from');
+  const rpDate = document.getElementById('rp-date');
+  const rpBody = document.getElementById('rp-body');
+  const rpCloseBtn = document.getElementById('rp-close-btn');
+  const rpPrevBtn = document.getElementById('rp-prev-btn');
+  const rpNextBtn = document.getElementById('rp-next-btn');
+  const rpIdx = document.getElementById('rp-idx');
+  const rpTotal = document.getElementById('rp-total');
+  const appBody = document.querySelector('.app-body');
+
+  let rpCurrentIndex = -1;
+
+  const getRowIds = () =>
+    Array.from(document.querySelectorAll('tbody tr'))
+      .map(r => r.getAttribute('data-msg-id'))
+      .filter(Boolean);
+
+  const openPane = async (messageId) => {
+    if (!pane) return;
+    rpBody.innerHTML = '<p class="rp-loading">Loading…</p>';
+    pane.hidden = false;
+    if (appBody) appBody.classList.add('pane-open');
+
+    try {
+      const resp = await fetch(`/api/v1/message/${messageId}/body`);
+      if (!resp.ok) throw new Error('fetch failed');
+      const data = await resp.json();
+      rpSubject.textContent = data.subject || '(No subject)';
+      rpFrom.textContent = data.sender || '(No sender)';
+      rpDate.textContent = data.date ? new Date(data.date).toLocaleString() : '';
+      rpBody.innerHTML = `<pre class="rp-pre">${escapeHtml(data.body || '')}</pre>`;
+    } catch (err) {
+      console.error('Reading pane error:', err);
+      rpBody.innerHTML = '<p class="rp-error">Failed to load message.</p>';
+    }
+  };
+
+  const closePane = () => {
+    if (!pane) return;
+    pane.hidden = true;
+    if (appBody) appBody.classList.remove('pane-open');
+    rpCurrentIndex = -1;
+    document.querySelectorAll('tbody tr.rp-selected').forEach(r => r.classList.remove('rp-selected'));
+  };
+
+  const navigateTo = (index) => {
+    const ids = getRowIds();
+    if (index < 0 || index >= ids.length) return;
+    rpCurrentIndex = index;
+    rpIdx.textContent = index + 1;
+    rpTotal.textContent = ids.length;
+    document.querySelectorAll('tbody tr').forEach((r, i) =>
+      r.classList.toggle('rp-selected', i === index)
+    );
+    openPane(ids[index]);
+  };
+
+  if (pane) {
+    rpCloseBtn.addEventListener('click', closePane);
+    rpPrevBtn.addEventListener('click', () => navigateTo(rpCurrentIndex - 1));
+    rpNextBtn.addEventListener('click', () => navigateTo(rpCurrentIndex + 1));
+
+    document.addEventListener('keydown', (e) => {
+      if (pane.hidden) return;
+      if (e.key === 'Escape') closePane();
+      if (e.key === 'ArrowUp')   { e.preventDefault(); navigateTo(rpCurrentIndex - 1); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); navigateTo(rpCurrentIndex + 1); }
+    });
+
+    // Single click on a data row — skip interactive elements
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('input, button, select, a, label')) return;
+      const row = e.target.closest('tbody tr');
+      if (!row) return;
+      const messageId = row.getAttribute('data-msg-id');
+      if (!messageId) return;
+      const ids = getRowIds();
+      rpCurrentIndex = ids.indexOf(messageId);
+      rpIdx.textContent = rpCurrentIndex + 1;
+      rpTotal.textContent = ids.length;
+      document.querySelectorAll('tbody tr').forEach(r => r.classList.remove('rp-selected'));
+      row.classList.add('rp-selected');
+      openPane(messageId);
+    });
+  }
+
+  // Escape HTML in message body text
+  function escapeHtml(text) {
+    const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+    return text.replace(/[&<>"']/g, m => map[m]);
+  }
 </script>
 {% block scripts %}{% endblock %}
 </body>
